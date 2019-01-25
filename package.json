@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "author": "Luca Druda",
   "license": "MIT",
+  "homepage": "https://github.com/lucadruda/iotc_nodejs_device_client",
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build"

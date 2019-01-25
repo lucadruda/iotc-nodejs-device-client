@@ -1,3 +1,6 @@
+// Copyright (c) Luca Druda. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+
 import { X509ProvisioningTransport, TpmProvisioningTransport, X509SecurityClient, TpmSecurityClient } from "azure-iot-provisioning-device/lib/interfaces";
 import { X509, Message } from "azure-iot-common";
 import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, IOTC_LOGGING } from "./constants";

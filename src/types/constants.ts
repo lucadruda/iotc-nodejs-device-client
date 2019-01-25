@@ -1,3 +1,6 @@
+// Copyright (c) Luca Druda. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+
 export const DPS_ENDPOINT = 'global.azure-devices-provisioning.net';
 export const DEFAULT_EXPIRATION_SECONDS = 21600; // 6 hours
 

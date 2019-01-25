@@ -1,16 +1,16 @@
 # Microsoft Azure IoTCentral SDK for Node.js
 
 [![Join the chat at https://gitter.im/iotdisc/community](https://badges.gitter.im/iotdisc.svg)](https://gitter.im/iotdisc/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-[![Licensed under the MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/lucadruda/iotc_java_device_client/blob/master/LICENSE)
+[![Licensed under the MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/lucadruda/iotc_nodejs_device_client/blob/master/LICENSE)
 
 
 ## Prerequisites
 + Node.js version 8.x or higher - https://nodejs.org
 
-## Installing `azure-iotcentral` and types
+## Installing `azure-iotcentral-device-client` and types
 
 ```
-npm install azure-iotcentral
+npm install azure-iotcentral-device-client
 ```
 ## Samples
 
@@ -19,7 +19,7 @@ SDK supports X509 and SymmetricKey authentication;
 
 X509
 ```
-const iotCentral = require('azure-iotcentral');
+const iotCentral = require('azure-iotcentral-device-client');
 
 const scopeId = '';
 const deviceId = '';
@@ -34,7 +34,7 @@ const iotc = new iotCentral.IoTCClient(deviceId, scopeId, 'X509_CERT', cert);
 ```
 SAS
 ```
-const iotCentral = require('azure-iotcentral');
+const iotCentral = require('azure-iotcentral-device-client');
 
 const scopeId = 'scopeID';
 const deviceId = 'deviceID';

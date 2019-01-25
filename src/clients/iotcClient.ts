@@ -204,17 +204,14 @@ export class IoTCClient implements IIoTCClient {
             settingName = `.${settingName}`;
         }
         return this.twin.on(`properties.desired${settingName ? settingName : ''}`, (settings) => {
-            console.log(`Changed: ${JSON.stringify(settings)}`);
             let changed = {};
             Object.getOwnPropertyNames(settings).forEach((setting) => {
+                this.logger.log(`Value of ${setting} changed.`)
                 if (setting === "$version") {
                     return;
                 }
                 let reported = this.twin.properties.reported[setting];
-                console.log(`Reported: ${JSON.stringify(reported)}`)
                 if (!reported || reported.desiredVersion != settings.$version) {
-                    // new version
-                    console.log('Add changed');
                     changed[setting] = settings[setting];
                 }
             });

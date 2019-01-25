@@ -1,5 +1,9 @@
 # Microsoft Azure IoTCentral SDK for Node.js
 
+[![Join the chat at https://gitter.im/iotdisc/community](https://badges.gitter.im/iotdisc.svg)](https://gitter.im/iotdisc/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Licensed under the MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/lucadruda/iotc_java_device_client/blob/master/LICENSE)
+
+
 ## Prerequisites
 + Node.js version 8.x or higher - https://nodejs.org
 
@@ -77,14 +81,23 @@ iotc.sendProperty({fieldName:'fieldValue'},sendCallback);
 iotc.sendEvent(event,sendCallback);
 ```
 ### Listen to settings update
-
-Listen to all settings changes
 ```
-iotc.on('SettingsUpdated',callback);
+iotc.on('SettingsUpdate',callback);
 ```
-Listen to specific setting
+To provide setting sync aknowledgement, the client can send back a property with the same name of the setting and a particular value object.
 ```
-iotc.on('SettingsUpdated.<SETTING_NAME>',callback);
+iotc.on('SettingsUpdated', (val) => {
+            Object.keys(val).forEach(setting => {
+                iotc.sendProperty({
+                    [setting]: {
+                        value: val[setting].value,
+                        status: 'completed',
+                        desiredVersion: val.$version,
+                        message: 'whatever'
+                    }
+                });
+            });
+        });
 ```
 
 ### Listen to commands

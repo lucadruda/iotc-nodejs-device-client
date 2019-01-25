@@ -6,8 +6,12 @@
   "author": "Luca Druda",
   "license": "MIT",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "prepare": "npm run build"
   },
+  "files": [
+    "dist"
+  ],
   "dependencies": {
     "azure-iot-common": "^1.8.2",
     "azure-iot-device": "^1.8.2",

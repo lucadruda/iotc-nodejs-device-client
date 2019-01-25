@@ -5,6 +5,9 @@
   "main": "dist/index.js",
   "author": "Luca Druda",
   "license": "MIT",
+  "scripts": {
+    "build": "tsc"
+  },
   "dependencies": {
     "azure-iot-common": "^1.8.2",
     "azure-iot-device": "^1.8.2",

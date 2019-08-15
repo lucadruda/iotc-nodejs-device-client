@@ -81,13 +81,13 @@ setInterval(() => {
 ```
 iotc.sendState({fieldName:'fieldValue'}, timestamp, sendCallback);
 ```
-### Send property update
-```
-iotc.sendProperty({fieldName:'fieldValue'}, sendCallback);
-```
 ### Send event
 ```
 iotc.sendEvent(event, timestamp, sendCallback);
+```
+### Send property update
+```
+iotc.sendProperty({fieldName:'fieldValue'}, sendCallback);
 ```
 ### Listen to settings update
 ```

@@ -59,24 +59,27 @@ export interface IIoTCClient {
     /**
      * 
      * @param payload Message to send: can be any type (usually json) or a collection of messages
+     * @param timestamp Timestamp in ISO format to set custom timestamp instead of now()
      * @param [callback] Function to execute when message gets delivered
      * @returns void or Promise<Result>
      */
-    sendTelemetry(payload: any, callback?: (err: Error, result: Result) => void): Promise<Result> | void,
+    sendTelemetry(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): Promise<Result> | void,
     /**
     * 
     * @param payload State to send: can be any type (usually json) or a collection of states
+    * @param timestamp Timestamp in ISO format to set custom timestamp instead of now()
     * @param [callback] Function to execute when state information gets delivered
     * @returns void or Promise<Result>
     */
-    sendState(payload: any, callback?: (err: Error, result: Result) => void): Promise<Result> | void,
+    sendState(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): Promise<Result> | void,
     /**
      * 
      * @param payload Event to send: can be any type (usually json) or a collection of events
+     * @param timestamp Timestamp in ISO format to set custom timestamp instead of now()
      * @param [callback] Function to execute when events gets triggered
      * @returns void or Promise<Result>
      */
-    sendEvent(payload: any, callback?: (err: Error, result: Result) => void): Promise<Result> | void,
+    sendEvent(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): Promise<Result> | void,
     /**
     * 
     * @param payload Property to send: can be any type (usually json) or a collection of properties

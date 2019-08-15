@@ -60,14 +60,14 @@ export class IoTCClient implements IIoTCClient {
     setProxy(options: HTTP_PROXY_OPTIONS): void {
         throw new Error("Method not implemented.");
     }
-    sendTelemetry(payload: any, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        return this.sendMessage(payload, callback);
+    sendTelemetry(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
+        return this.sendMessage(payload, timestamp, callback);
     }
-    sendState(payload: any, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        return this.sendMessage(payload, callback);
+    sendState(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
+        return this.sendMessage(payload, timestamp, callback);
     }
-    sendEvent(payload: any, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        return this.sendMessage(payload, callback);
+    sendEvent(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
+        return this.sendMessage(payload, timestamp, callback);
     }
     sendProperty(payload: any, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
         // payload = JSON.stringify(payload);
@@ -121,7 +121,9 @@ export class IoTCClient implements IIoTCClient {
         this.deviceClient = DeviceClient.fromConnectionString(this.connectionstring, await this.deviceProvisioning.getConnectionTransport(this.protocol));
         try {
             await util.promisify(this.deviceClient.open).bind(this.deviceClient)();
-            this.twin = await util.promisify(this.deviceClient.getTwin).bind(this.deviceClient)();
+            if (!(this.protocol == DeviceTransport.HTTP)) {
+                this.twin = await util.promisify(this.deviceClient.getTwin).bind(this.deviceClient)();
+            }
         }
         catch (err) {
             throw err;
@@ -176,7 +178,7 @@ export class IoTCClient implements IIoTCClient {
         }
     }
 
-    sendMessage(payload: any, callback?: (err: ConnectionError, result: Result) => void): void | Promise<Result> {
+    sendMessage(payload: any, timestamp?: string, callback?: (err: ConnectionError, result: Result) => void): void | Promise<Result> {
         const clientCallback = (clientErr, clientRes) => {
             if (clientErr) {
                 callback(new ConnectionError(clientErr.message, IOTC_CONNECTION_ERROR.COMMUNICATION_ERROR), null);
@@ -190,9 +192,12 @@ export class IoTCClient implements IIoTCClient {
                 this.deviceClient.sendEventBatch(payload.map(p => new Message(JSON.stringify(p))), clientCallback);
             }
             else {
-                this.deviceClient.sendEvent(new Message(JSON.stringify(payload)), clientCallback);
+                var message = new Message(JSON.stringify(payload));
+                if (timestamp) {
+                    message.properties.add('iothub-creation-time-utc', timestamp);
+                }
+                this.deviceClient.sendEvent(message, clientCallback);
             }
-
         }
         else {
             return new Promise<Result>(async (resolve, reject) => {
@@ -202,7 +207,11 @@ export class IoTCClient implements IIoTCClient {
                         resolve(new Result(IOTC_CONNECTION_OK));
                     }
                     else {
-                        const messageEnqued = await this.deviceClient.sendEvent(new Message(JSON.stringify(payload)));
+                        var message = new Message(JSON.stringify(payload));
+                        if (timestamp) {
+                            message.properties.add('iothub-creation-time-utc', timestamp);
+                        }
+                        const messageEnqued = await this.deviceClient.sendEvent(message);
                         resolve(new Result(IOTC_CONNECTION_OK));
                     }
                 }

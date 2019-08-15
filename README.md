@@ -64,6 +64,8 @@ After successfull connection, IOTC context is available for further commands.
 
 All the callbacks are optional parameters and are triggered when message has reached the ingestion engine.
 
+An optional timestamp field can be included in the send methods, to specify the UTC date and time of the message. This field must be in ISO format (e.g., YYYY-MM-DDTHH:mm:ss.sssZ). If timestamp is not provided, the current date and time will be used.
+
 ### Send telemetry
 
 Send telemetry every 3 seconds
@@ -73,23 +75,23 @@ setInterval(() => {
                 field1: value1,
                 field2: value2,
                 field3: value3
-            }, sendCallback)
+            }, timestamp, sendCallback)
 ```
 ### Send state update
 ```
-iotc.sendState({fieldName:'fieldValue'},sendCallback);
+iotc.sendState({fieldName:'fieldValue'}, timestamp, sendCallback);
 ```
 ### Send property update
 ```
-iotc.sendProperty({fieldName:'fieldValue'},sendCallback);
+iotc.sendProperty({fieldName:'fieldValue'}, sendCallback);
 ```
 ### Send event
 ```
-iotc.sendEvent(event,sendCallback);
+iotc.sendEvent(event, timestamp, sendCallback);
 ```
 ### Listen to settings update
 ```
-iotc.on('SettingsUpdate',callback);
+iotc.on('SettingsUpdate', callback);
 ```
 To provide setting sync aknowledgement, the client can send back a property with the same name of the setting and a particular value object.
 ```

@@ -23,8 +23,16 @@ export type DeviceSecurityClient = X509SecurityClient | TpmSecurityClient;
 
 export interface IIoTCClient {
 
-
     // new(id: string, scopeId: string, authenticationType: IOTC_CONNECT, options: X509 | string): IIoTCClient
+    /**
+     * Set connection string for the client, so registration is not necesary any more
+     * @param connectionstring connectiong string for device in IoT Central 
+     */
+    setConnectionString(connectionstring: string): void;
+      /**
+     * Get the derived connection string
+     */
+    getConnectionString(): string;
     /**
      * Set transport protocol for the client
      * @param transport (http, mqtt or amqp)

@@ -17,6 +17,7 @@ export class IoTCClient implements IIoTCClient {
 
     private protocol: DeviceTransport = DeviceTransport.MQTT;
     private endpoint: string = DPS_DEFAULT_ENDPOINT;
+    private connectionstring: string;
     private deviceClient: DeviceClient;
     private deviceProvisioning: DeviceProvisioning;
     private sasAuth: SASAuthentication;
@@ -33,6 +34,15 @@ export class IoTCClient implements IIoTCClient {
             this.logger = new ConsoleLogger();
         }
         this.deviceProvisioning = new DeviceProvisioning(this.endpoint);
+    }
+    setConnectionString(connectionstring: string): void {
+        if (typeof (connectionstring) === 'string') {
+            this.connectionstring = connectionstring;
+            this.logger.log(`Connection string set to ${connectionstring}.`);
+        }
+    }
+    getConnectionString(): string {
+        return this.connectionstring;
     }
     setProtocol(transport: string | DeviceTransport): void {
         if (typeof (transport) === 'string') {
@@ -105,7 +115,10 @@ export class IoTCClient implements IIoTCClient {
 
     async connect(): Promise<any> {
         this.logger.log(`Connecting client...`);
-        this.deviceClient = DeviceClient.fromConnectionString(await this.register(), await this.deviceProvisioning.getConnectionTransport(this.protocol));
+        if (!this.connectionstring) {
+            this.connectionstring = await this.register();
+        }
+        this.deviceClient = DeviceClient.fromConnectionString(this.connectionstring, await this.deviceProvisioning.getConnectionTransport(this.protocol));
         try {
             await util.promisify(this.deviceClient.open).bind(this.deviceClient)();
             this.twin = await util.promisify(this.deviceClient.getTwin).bind(this.deviceClient)();
@@ -133,6 +146,7 @@ export class IoTCClient implements IIoTCClient {
             const registration = await this.sasAuth.register();
             connectionString = `HostName=${registration.assignedHub};DeviceId=${registration.deviceId};SharedAccessKey=${this.sasAuth.deviceKey}`;
         }
+        this.connectionstring = connectionString;
         return connectionString;
     }
 

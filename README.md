@@ -19,7 +19,7 @@ A couple of samples in Javascripts can be found [here](https://github.com/lucadr
 When connecting a device to an IoT Central application an IoTCClient is initialized.
 SDK supports X509 and SymmetricKey authentication;
 
-X509
+#### X509
 ```
 const iotCentral = require('azure-iotcentral-device-client');
 
@@ -34,7 +34,7 @@ const cert = {
 
 const iotc = new iotCentral.IoTCClient(deviceId, scopeId, 'X509_CERT', cert);
 ```
-SAS
+#### SAS
 ```
 const iotCentral = require('azure-iotcentral-device-client');
 
@@ -43,6 +43,11 @@ const deviceId = 'deviceID';
 const sasKey = 'masterKey';
 
 const iotc = new iotCentral.IoTCClient(deviceId, scopeId, 'symm_key', sasKey);
+```
+#### Connection String
+Use either the X509 or SAS code and add the folowing line before the connect() statement
+```
+iotc.setConnectionString('connectionstring');
 ```
 ### Connect
 Using callback

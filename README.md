@@ -14,6 +14,8 @@ npm install azure-iotcentral-device-client
 ```
 ## Samples
 
+A couple of samples in Javascripts can be found [here](https://github.com/lucadruda/iotc-samples)
+
 When connecting a device to an IoT Central application an IoTCClient is initialized.
 SDK supports X509 and SymmetricKey authentication;
 

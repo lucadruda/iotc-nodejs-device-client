@@ -25,12 +25,7 @@ export interface IIoTCClient {
 
     // new(id: string, scopeId: string, authenticationType: IOTC_CONNECT, options: X509 | string): IIoTCClient
     /**
-     * Set connection string for the client, so registration is not necesary any more
-     * @param connectionstring connectiong string for device in IoT Central 
-     */
-    setConnectionString(connectionstring: string): void;
-      /**
-     * Get the derived connection string
+     * Get the current connection string
      */
     getConnectionString(): string;
     /**

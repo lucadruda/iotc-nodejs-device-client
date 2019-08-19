@@ -45,9 +45,15 @@ const sasKey = 'masterKey';
 const iotc = new iotCentral.IoTCClient(deviceId, scopeId, 'symm_key', sasKey);
 ```
 #### Connection String
-Use either the X509 or SAS code and add the folowing line before the connect() statement
+You can use the SAS or X509 approach to retrieve the connection string through DPS. Use `getConnectionString()` to retrieve the connection string from the IoT Central client once the connection is open, when using SAS or X509.
 ```
-iotc.setConnectionString('connectionstring');
+const iotCentral = require('azure-iotcentral-device-client');
+
+const scopeId = 'scopeID';
+const deviceId = 'deviceID';
+const connStr = 'connectionstring';
+
+const iotc = new iotCentral.IoTCClient(deviceId, scopeId, 'conn_string', connStr);
 ```
 ### Connect
 Using callback
@@ -64,8 +70,6 @@ After successfull connection, IOTC context is available for further commands.
 
 All the callbacks are optional parameters and are triggered when message has reached the ingestion engine.
 
-An optional timestamp field can be included in the send methods, to specify the UTC date and time of the message. This field must be in ISO format (e.g., YYYY-MM-DDTHH:mm:ss.sssZ). If timestamp is not provided, the current date and time will be used.
-
 ### Send telemetry
 
 Send telemetry every 3 seconds
@@ -77,6 +81,8 @@ setInterval(() => {
                 field3: value3
             }, timestamp, sendCallback)
 ```
+An optional timestamp field can be included in the send methods, to specify the UTC date and time of the message. This field must be in ISO format (e.g., YYYY-MM-DDTHH:mm:ss.sssZ). If timestamp is not provided, the current date and time will be used.
+
 ### Send state update
 ```
 iotc.sendState({fieldName:'fieldValue'}, timestamp, sendCallback);

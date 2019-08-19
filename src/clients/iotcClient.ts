@@ -35,12 +35,6 @@ export class IoTCClient implements IIoTCClient {
         }
         this.deviceProvisioning = new DeviceProvisioning(this.endpoint);
     }
-    setConnectionString(connectionstring: string): void {
-        if (typeof (connectionstring) === 'string') {
-            this.connectionstring = connectionstring;
-            this.logger.log(`Connection string set to ${connectionstring}.`);
-        }
-    }
     getConnectionString(): string {
         return this.connectionstring;
     }
@@ -88,6 +82,7 @@ export class IoTCClient implements IIoTCClient {
             });
         }
     }
+
     disconnect(callback?: (err: Error, result: Result) => void): void | Promise<Result> {
         this.logger.log(`Disconnecting client...`);
         if (callback) {
@@ -115,9 +110,7 @@ export class IoTCClient implements IIoTCClient {
 
     async connect(): Promise<any> {
         this.logger.log(`Connecting client...`);
-        if (!this.connectionstring) {
-            this.connectionstring = await this.register();
-        }
+        this.connectionstring = await this.register();
         this.deviceClient = DeviceClient.fromConnectionString(this.connectionstring, await this.deviceProvisioning.getConnectionTransport(this.protocol));
         try {
             await util.promisify(this.deviceClient.open).bind(this.deviceClient)();
@@ -143,12 +136,15 @@ export class IoTCClient implements IIoTCClient {
             const registration = await this.deviceProvisioning.register(this.scopeId, this.protocol, x509Security);
             connectionString = `HostName=${registration.assignedHub};DeviceId=${registration.deviceId};x509=true`;
         }
-        else {
+        else if (this.authenticationType == IOTC_CONNECT.SYMM_KEY) {
             this.sasAuth = new SASAuthentication(this.endpoint, this.id, this.scopeId, this.options as string, this.protocol, this.logger);
             const registration = await this.sasAuth.register();
             connectionString = `HostName=${registration.assignedHub};DeviceId=${registration.deviceId};SharedAccessKey=${this.sasAuth.deviceKey}`;
         }
-        this.connectionstring = connectionString;
+        else if (this.authenticationType == IOTC_CONNECT.CONN_STRING) {
+            // Just pass the provided connection string.
+            connectionString = this.options;
+        }
         return connectionString;
     }
 

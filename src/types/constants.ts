@@ -8,7 +8,9 @@ export const DEFAULT_EXPIRATION_SECONDS = 21600; // 6 hours
 export enum IOTC_PROTOCOL {
     MQTT = 1,
     AMQP = 2,
-    HTTP = 4
+    HTTP = 4,
+    MQTT_WS = 8,
+    AMQP_WS = 16
 }
 
 /**-------------------------------------------------------------------------------------- */
@@ -71,5 +73,7 @@ export const DPS_DEFAULT_ENDPOINT = 'global.azure-devices-provisioning.net';
 export enum DeviceTransport {
     HTTP,
     MQTT,
-    AMQP
+    AMQP,
+    MQTT_WS,
+    AMQP_WS
 }

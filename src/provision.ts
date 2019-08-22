@@ -1,6 +1,8 @@
 // Copyright (c) Luca Druda. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 import * as util from 'util';
+import { Buffer } from "buffer";
+import * as crypto from 'crypto';
 import { ProvisioningDeviceClient, RegistrationResult } from 'azure-iot-provisioning-device';
 import { DeviceProvisioningTransport, DeviceSecurityClient } from './types/interfaces';
 import { X509 } from 'azure-iot-common';
@@ -57,6 +59,12 @@ export class DeviceProvisioning {
         const transportStr = DeviceTransport[transportType];
         let transportCtr = (await import(`azure-iot-device-${transportStr.toLowerCase()}`))[capitalizeFirst(transportStr)];
         return transportCtr;
+    }
+
+    public computeDerivedKey(masterKey: string, deviceId: string): string {
+        return crypto.createHmac('SHA256', Buffer.from(masterKey, 'base64'))
+            .update(deviceId, 'utf8')
+            .digest('base64');
     }
 
 }

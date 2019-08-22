@@ -9,7 +9,6 @@ import { Client as DeviceClient, Twin, DeviceMethodResponse } from 'azure-iot-de
 import { ConsoleLogger } from "../consoleLogger";
 import { log, error } from "util";
 import { DeviceProvisioning } from "../provision";
-import { SASAuthentication } from "../SASAuthentication";
 import * as rhea from 'rhea';
 
 export class IoTCClient implements IIoTCClient {
@@ -20,7 +19,6 @@ export class IoTCClient implements IIoTCClient {
     private endpoint: string = DPS_DEFAULT_ENDPOINT;
     private deviceClient: DeviceClient;
     private deviceProvisioning: DeviceProvisioning;
-    private sasAuth: SASAuthentication;
     private twin: Twin;
     private logger: IIoTCLogger;
     private modelId: string;
@@ -135,10 +133,16 @@ export class IoTCClient implements IIoTCClient {
             connectionString = `HostName=${registration.assignedHub};DeviceId=${registration.deviceId};x509=true`;
         }
         else {
-            const sasKey = this.options as string;
+            let sasKey;
+            if (this.authenticationType == IOTC_CONNECT.SYMM_KEY) {
+                sasKey = this.deviceProvisioning.computeDerivedKey(this.options as string, this.id);
+            }
+            else {
+                sasKey = this.options as string;
+            }
             const sasSecurity = await this.deviceProvisioning.generateSymKeySecurityClient(this.id, sasKey);
             const registration = await this.deviceProvisioning.register(this.scopeId, this.protocol, sasSecurity);
-            connectionString = `HostName=${registration.assignedHub};DeviceId=${registration.deviceId};x509=true`;
+            connectionString = `HostName=${registration.assignedHub};DeviceId=${registration.deviceId};SharedAccessKey=${sasKey}`;
         }
         return connectionString;
     }

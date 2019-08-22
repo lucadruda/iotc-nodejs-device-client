@@ -24,7 +24,8 @@ export enum IOTC_LOGGING {
 
 export enum IOTC_CONNECT {
     SYMM_KEY = 1,
-    X509_CERT = 2
+    DEVICE_KEY = 2,
+    X509_CERT = 3
 }
 
 

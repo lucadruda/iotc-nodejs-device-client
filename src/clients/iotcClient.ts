@@ -15,6 +15,7 @@ import * as rhea from 'rhea';
 export class IoTCClient implements IIoTCClient {
 
 
+
     private protocol: DeviceTransport = DeviceTransport.MQTT;
     private endpoint: string = DPS_DEFAULT_ENDPOINT;
     private deviceClient: DeviceClient;
@@ -22,6 +23,7 @@ export class IoTCClient implements IIoTCClient {
     private sasAuth: SASAuthentication;
     private twin: Twin;
     private logger: IIoTCLogger;
+    private modelId: string;
     constructor(readonly id: string, readonly scopeId: string, readonly authenticationType: IOTC_CONNECT | string, readonly options: X509 | string, logger?: IIoTCLogger) {
         if (typeof (authenticationType) == 'string') {
             this.authenticationType = IOTC_CONNECT[authenticationType.toUpperCase()];
@@ -46,6 +48,10 @@ export class IoTCClient implements IIoTCClient {
     setGlobalEndpoint(endpoint: string): void {
         this.endpoint = endpoint;
         this.logger.log(`Endpoint set to ${endpoint}.`);
+    }
+
+    setModelId(modelId: string): void {
+        this.deviceProvisioning.setIoTCModelId(modelId);
     }
     setProxy(options: HTTP_PROXY_OPTIONS): void {
         throw new Error("Method not implemented.");
@@ -129,9 +135,10 @@ export class IoTCClient implements IIoTCClient {
             connectionString = `HostName=${registration.assignedHub};DeviceId=${registration.deviceId};x509=true`;
         }
         else {
-            this.sasAuth = new SASAuthentication(this.endpoint, this.id, this.scopeId, this.options as string, this.protocol, this.logger);
-            const registration = await this.sasAuth.register();
-            connectionString = `HostName=${registration.assignedHub};DeviceId=${registration.deviceId};SharedAccessKey=${this.sasAuth.deviceKey}`;
+            const sasKey = this.options as string;
+            const sasSecurity = await this.deviceProvisioning.generateSymKeySecurityClient(this.id, sasKey);
+            const registration = await this.deviceProvisioning.register(this.scopeId, this.protocol, sasSecurity);
+            connectionString = `HostName=${registration.assignedHub};DeviceId=${registration.deviceId};x509=true`;
         }
         return connectionString;
     }

@@ -7,11 +7,13 @@ import { X509 } from 'azure-iot-common';
 import { X509Security } from 'azure-iot-security-x509';
 import { DPS_DEFAULT_ENDPOINT, DeviceTransport } from './types/constants';
 import { capitalizeFirst } from './utils/stringUtils';
+import { SymmetricKeySecurityClient } from 'azure-iot-security-symmetric-key';
 
 
 
 export class DeviceProvisioning {
 
+    private iotcModelId: string;
     constructor(private endpoint: string = DPS_DEFAULT_ENDPOINT) {
 
     }
@@ -25,17 +27,24 @@ export class DeviceProvisioning {
     public async register(scopeId: string, transportType: DeviceTransport, securityClient: DeviceSecurityClient): Promise<RegistrationResult> {
         const transport = await this.getProvisionTransport(transportType);
         const deviceClient = ProvisioningDeviceClient.create(this.endpoint, scopeId, transport, securityClient);
+        if (this.iotcModelId) {
+            deviceClient.setProvisioningPayload({
+                iotcModelId: this.iotcModelId
+            });
+        }
         return util.promisify(deviceClient.register).bind(deviceClient)();
     }
 
+    public setIoTCModelId(modelId: string) {
+        this.iotcModelId = modelId;
+    }
     public generateX509SecurityClient(deviceId: string, cert: X509): DeviceSecurityClient {
         return new X509Security(deviceId, cert);
     }
 
     public generateSymKeySecurityClient(deviceId: string, symmetricKey: string): DeviceSecurityClient {
-        // // TODO: Uncomment this line when symmetricKey library will be publicly available
-        // return new SymmetricKeySecurityClient(deviceId, symmetricKey);
-        return null;
+        // TODO: Uncomment this line when symmetricKey library will be publicly available
+        return new SymmetricKeySecurityClient(deviceId, symmetricKey);
     }
 
     private async getProvisionTransport(transportType: DeviceTransport): Promise<DeviceProvisioningTransport> {

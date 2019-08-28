@@ -12,6 +12,7 @@
 ```
 npm install azure-iotcentral-device-client
 ```
+
 ## Samples
 
 A couple of samples in Javascripts can be found [here](https://github.com/lucadruda/iotc-samples)
@@ -34,6 +35,7 @@ const cert = {
 
 const iotc = new iotCentral.IoTCClient(deviceId, scopeId, 'X509_CERT', cert);
 ```
+
 #### SAS
 ```
 const iotCentral = require('azure-iotcentral-device-client');
@@ -44,17 +46,7 @@ const sasKey = 'masterKey';
 
 const iotc = new iotCentral.IoTCClient(deviceId, scopeId, 'symm_key', sasKey);
 ```
-#### Connection String
-You can use the SAS or X509 approach to retrieve the connection string through DPS. Use `getConnectionString()` to retrieve the connection string from the IoT Central client once the connection is open, when using SAS or X509.
-```
-const iotCentral = require('azure-iotcentral-device-client');
 
-const scopeId = 'scopeID';
-const deviceId = 'deviceID';
-const connStr = 'connectionstring';
-
-const iotc = new iotCentral.IoTCClient(deviceId, scopeId, 'conn_string', connStr);
-```
 ### Connect
 Using callback
 ```
@@ -163,4 +155,3 @@ certificateGenerator.init()
 ```
 This example wait for a validation code which is provided by IoTCentral in the device configuration page when uploading primary or secondary root certificate.
 Resulting device certificates can be used in connection example above.
-

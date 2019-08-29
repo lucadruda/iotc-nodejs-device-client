@@ -106,6 +106,7 @@ iotc.on('SettingsUpdated', (val) => {
             });
         });
 ```
+NB: `SettingUpdated` is not supported when using `HTTP` as protocol.
 
 ### Listen to commands
 ```
@@ -123,6 +124,7 @@ iotc.on('Command', (cmd) => {
             }, sendCallback);
         });
 ```
+NB: `Command` is not supported when using `HTTP`, `MQTT_WS`, or `AMQP_WS` as protocol.
 
 ## One-touch device provisioning and approval
 A device can send custom data during provision process: if a device is aware of its IoT Central template Id, then it can be automatically provisioned.

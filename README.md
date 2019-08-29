@@ -12,6 +12,7 @@
 ```
 npm install azure-iotcentral-device-client
 ```
+
 ## Samples
 
 A couple of samples in Javascripts can be found [here](https://github.com/lucadruda/iotc-samples)
@@ -19,7 +20,7 @@ A couple of samples in Javascripts can be found [here](https://github.com/lucadr
 When connecting a device to an IoT Central application an IoTCClient is initialized.
 SDK supports X509 and SymmetricKey authentication;
 
-X509
+#### X509
 ```
 const iotCentral = require('azure-iotcentral-device-client');
 
@@ -34,7 +35,8 @@ const cert = {
 
 const iotc = new iotCentral.IoTCClient(deviceId, scopeId, 'X509_CERT', cert);
 ```
-SAS
+
+#### SAS
 ```
 const iotCentral = require('azure-iotcentral-device-client');
 
@@ -44,6 +46,7 @@ const sasKey = 'masterKey';
 
 const iotc = new iotCentral.IoTCClient(deviceId, scopeId, 'symm_key', sasKey);
 ```
+
 ### Connect
 Using callback
 ```
@@ -68,23 +71,25 @@ setInterval(() => {
                 field1: value1,
                 field2: value2,
                 field3: value3
-            }, sendCallback)
+            }, timestamp, sendCallback)
 ```
+An optional timestamp field can be included in the send methods, to specify the UTC date and time of the message. This field must be in ISO format (e.g., YYYY-MM-DDTHH:mm:ss.sssZ). If timestamp is not provided, the current date and time will be used.
+
 ### Send state update
 ```
-iotc.sendState({fieldName:'fieldValue'},sendCallback);
-```
-### Send property update
-```
-iotc.sendProperty({fieldName:'fieldValue'},sendCallback);
+iotc.sendState({fieldName:'fieldValue'}, timestamp, sendCallback);
 ```
 ### Send event
 ```
-iotc.sendEvent(event,sendCallback);
+iotc.sendEvent(event, timestamp, sendCallback);
+```
+### Send property update
+```
+iotc.sendProperty({fieldName:'fieldValue'}, sendCallback);
 ```
 ### Listen to settings update
 ```
-iotc.on('SettingsUpdate',callback);
+iotc.on('SettingsUpdate', callback);
 ```
 To provide setting sync aknowledgement, the client can send back a property with the same name of the setting and a particular value object.
 ```
@@ -175,4 +180,3 @@ certificateGenerator.init()
 ```
 This example wait for a validation code which is provided by IoTCentral in the device configuration page when uploading primary or secondary root certificate.
 Resulting device certificates can be used in connection example above.
-

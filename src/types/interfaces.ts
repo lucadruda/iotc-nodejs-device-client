@@ -4,6 +4,7 @@
 import { X509ProvisioningTransport, TpmProvisioningTransport, X509SecurityClient, TpmSecurityClient } from "azure-iot-provisioning-device/lib/interfaces";
 import { X509, Message } from "azure-iot-common";
 import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, IOTC_LOGGING } from "./constants";
+import { SymmetricKeySecurityClient } from "azure-iot-security-symmetric-key";
 
 export class ConnectionError extends Error {
     constructor(message: string, public code: IOTC_CONNECTION_ERROR) {
@@ -18,7 +19,7 @@ export class Result {
 
 export type DeviceProvisioningTransport = X509ProvisioningTransport | TpmProvisioningTransport;
 
-export type DeviceSecurityClient = X509SecurityClient | TpmSecurityClient;
+export type DeviceSecurityClient = X509SecurityClient | TpmSecurityClient | SymmetricKeySecurityClient;
 
 
 export interface IIoTCClient {
@@ -33,6 +34,11 @@ export interface IIoTCClient {
      * @param transport (http, mqtt or amqp)
      */
     setProtocol(transport: string | DeviceTransport): void,
+    /**
+     * 
+     * @param modelId IoT Central model Id for automatic approval process
+     */
+    setModelId(modelId: string): void,
     /**
      * Set global endpoint for DPS provisioning
      * @param endpoint hostname without protocol

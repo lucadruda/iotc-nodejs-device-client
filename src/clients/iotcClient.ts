@@ -140,6 +140,10 @@ export class IoTCClient implements IIoTCClient {
             const registration = await this.deviceProvisioning.register(this.scopeId, this.protocol, x509Security);
             connectionString = `HostName=${registration.assignedHub};DeviceId=${registration.deviceId};x509=true`;
         }
+       else if (this.authenticationType == IOTC_CONNECT.CONN_STRING) {
+            // Just pass the provided connection string.
+            connectionString = this.options;
+        }
         else {
             let sasKey;
             if (this.authenticationType == IOTC_CONNECT.SYMM_KEY) {
@@ -152,10 +156,7 @@ export class IoTCClient implements IIoTCClient {
             const registration = await this.deviceProvisioning.register(this.scopeId, this.protocol, sasSecurity);
             connectionString = `HostName=${registration.assignedHub};DeviceId=${registration.deviceId};SharedAccessKey=${sasKey}`;
         }
-        else if (this.authenticationType == IOTC_CONNECT.CONN_STRING) {
-            // Just pass the provided connection string.
-            connectionString = this.options;
-        }
+       
         return connectionString;
     }
 

@@ -124,6 +124,31 @@ iotc.on('Command', (cmd) => {
         });
 ```
 
+## One-touch device provisioning and approval
+A device can send custom data during provision process: if a device is aware of its IoT Central template Id, then it can be automatically provisioned.
+
+### How to set IoTC template ID in your device
+Template Id can be found in the device explorer page of IoTCentral
+![Img](assets/modelId.jpg)
+
+Then call this method before connect():
+
+```
+iotc.setModelId('<modelId>');
+```
+
+### Manual approval (default)
+By default device auto-approval in IoT Central is disabled, which means that administrator needs to approve the device registration to complete the provisioning process.
+This can be done from explorer page after selecting the device
+![Img](assets/manual_approval.jpg)
+
+
+### Automatic approval
+To change default behavior, administrator can enable device auto-approval from Device Connection page under the Administration section.
+With automatic approval a device can be provisioned without any manual action and can start sending/receiving data after status changes to "Provisioned"
+
+![Img](assets/auto_approval.jpg)
+
 ## Generate x509 certificates
 IoT Central SDK comes with a tool to generate self-signed x509 certificates to be used when testing device connection.
 If you want to generate certificates for 6 devices and also validate the authority you can run something like this:

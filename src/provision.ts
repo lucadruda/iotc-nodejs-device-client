@@ -50,22 +50,22 @@ export class DeviceProvisioning {
     }
 
     private async getProvisionTransport(transportType: DeviceTransport): Promise<DeviceProvisioningTransport> {
-        const transportStr = DeviceTransport[transportType].split("_")[0];
-        var webSocket = '';
+        let transportStr = DeviceTransport[transportType].split("_")[0];
+        let mod = capitalizeFirst(transportStr);
         if (DeviceTransport[transportType].split("_")[1]) {
-            webSocket = DeviceTransport[transportType].split("_")[1];
+            mod = capitalizeFirst(DeviceTransport[transportType].split("_")[1]);
         }
-        const transport = (await import(`azure-iot-provisioning-device-${transportStr.toLowerCase()}`))[capitalizeFirst(transportStr)][capitalizeFirst(webSocket)];
+        const transport = (await import(`azure-iot-provisioning-device-${transportStr.toLowerCase()}`))[mod];
         return new transport();
     }
 
     public async getConnectionTransport(transportType: DeviceTransport): Promise<any> {
-        const transportStr = DeviceTransport[transportType].split("_")[0];
-        var webSocket = '';
+        let transportStr = DeviceTransport[transportType].split("_")[0];
+        let mod = capitalizeFirst(transportStr);
         if (DeviceTransport[transportType].split("_")[1]) {
-            webSocket = DeviceTransport[transportType].split("_")[1];
+            mod = capitalizeFirst(DeviceTransport[transportType].split("_")[1]);
         }
-        let transportCtr = (await import(`azure-iot-device-${transportStr.toLowerCase()}`))[capitalizeFirst(transportStr)][capitalizeFirst(webSocket)];
+        let transportCtr = (await import(`azure-iot-device-${transportStr.toLowerCase()}`))[mod];
         return transportCtr;
     }
 

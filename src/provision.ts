@@ -1,6 +1,5 @@
 // Copyright (c) Luca Druda. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
-import * as util from 'util';
 import { Buffer } from "buffer";
 import * as crypto from 'crypto';
 import { ProvisioningDeviceClient, RegistrationResult } from 'azure-iot-provisioning-device';
@@ -10,6 +9,7 @@ import { X509Security } from 'azure-iot-security-x509';
 import { DPS_DEFAULT_ENDPOINT, DeviceTransport } from './types/constants';
 import { capitalizeFirst } from './utils/stringUtils';
 import { SymmetricKeySecurityClient } from 'azure-iot-security-symmetric-key';
+import { promisify } from "./utils/callbacks";
 
 
 
@@ -34,7 +34,7 @@ export class DeviceProvisioning {
                 iotcModelId: this.iotcModelId
             });
         }
-        return util.promisify(deviceClient.register).bind(deviceClient)();
+        return promisify(deviceClient.register).bind(deviceClient)();
     }
 
     public setIoTCModelId(modelId: string) {

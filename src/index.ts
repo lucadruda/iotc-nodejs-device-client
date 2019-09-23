@@ -2,9 +2,9 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 import { IIoTCClient } from './types/interfaces';
 import { IoTCClient } from './clients/iotcClient';
-import { CertificateGenerator } from './utils/certificates';
+import * as Constants from './types/constants'
 
 
 export { IIoTCClient };
 export { IoTCClient };
-export { CertificateGenerator };
+export { Constants };

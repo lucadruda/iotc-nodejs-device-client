@@ -4,12 +4,11 @@
 import { IIoTCClient, ConnectionError, Result, IIoTCLogger } from "../types/interfaces";
 import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_OK, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, DPS_DEFAULT_ENDPOINT, IOTC_LOGGING, IOTC_PROTOCOL } from "../types/constants";
 import { X509, Message, callbackToPromise } from "azure-iot-common";
-import * as util from 'util';
 import { Client as DeviceClient, Twin, DeviceMethodResponse } from 'azure-iot-device';
 import { ConsoleLogger } from "../consoleLogger";
-import { log, error } from "util";
 import { DeviceProvisioning } from "../provision";
 import * as rhea from 'rhea';
+import { promisify } from "../utils/callbacks";
 
 export class IoTCClient implements IIoTCClient {
 
@@ -117,9 +116,9 @@ export class IoTCClient implements IIoTCClient {
         this.connectionstring = await this.register();
         this.deviceClient = DeviceClient.fromConnectionString(this.connectionstring, await this.deviceProvisioning.getConnectionTransport(this.protocol));
         try {
-            await util.promisify(this.deviceClient.open).bind(this.deviceClient)();
+            await promisify(this.deviceClient.open).bind(this.deviceClient)();
             if (!(this.protocol == DeviceTransport.HTTP)) {
-                this.twin = await util.promisify(this.deviceClient.getTwin).bind(this.deviceClient)();
+                this.twin = await promisify(this.deviceClient.getTwin).bind(this.deviceClient)();
             }
         }
         catch (err) {

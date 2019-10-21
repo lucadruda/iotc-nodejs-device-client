@@ -31,7 +31,10 @@ export class DeviceProvisioning {
         const deviceClient = ProvisioningDeviceClient.create(this.endpoint, scopeId, transport, securityClient);
         if (this.iotcModelId) {
             deviceClient.setProvisioningPayload({
-                iotcModelId: this.iotcModelId
+                '__iot:interfaces': {
+                    CapabilityModelId: this.iotcModelId,
+                    CapabilityModel: {}
+                }
             });
         }
         return util.promisify(deviceClient.register).bind(deviceClient)();

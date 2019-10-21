@@ -22,7 +22,6 @@ export class IoTCClient implements IIoTCClient {
     private deviceProvisioning: DeviceProvisioning;
     private twin: Twin;
     private logger: IIoTCLogger;
-    private modelId: string;
     constructor(readonly id: string, readonly scopeId: string, readonly authenticationType: IOTC_CONNECT | string, readonly options: X509 | string, logger?: IIoTCLogger) {
         if (typeof (authenticationType) == 'string') {
             this.authenticationType = IOTC_CONNECT[authenticationType.toUpperCase()];

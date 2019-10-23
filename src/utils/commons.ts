@@ -5,3 +5,6 @@ export function capitalizeFirst(text: string) {
     return `${text.charAt(0).toUpperCase()}${text.substring(1).toLowerCase()}`;
 }
 
+export function isObject(a: any): boolean {
+    return (!!a) && (a.constructor === Object);
+};

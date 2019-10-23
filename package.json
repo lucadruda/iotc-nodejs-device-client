@@ -17,10 +17,11 @@
   ],
   "dependencies": {
     "azure-iot-common": "^1.8.2",
-    "azure-iot-device": "^1.11.0",
-    "azure-iot-device-amqp": "^1.8.1",
-    "azure-iot-device-http": "^1.8.1",
-    "azure-iot-device-mqtt": "^1.8.1",
+    "azure-iot-device": "^1.12.0-preview.1",
+    "azure-iot-device-amqp": "^1.12.0-preview.1",
+    "azure-iot-device-http": "^1.12.0-preview.1",
+    "azure-iot-device-mqtt": "^1.12.0-preview.1",
+    "azure-iot-digitaltwins-device": "^1.0.0-preview.2",
     "azure-iot-provisioning-device-amqp": "^1.6.1",
     "azure-iot-provisioning-device-http": "^1.6.1",
     "azure-iot-provisioning-device-mqtt": "^1.5.10",
@@ -34,6 +35,7 @@
     "uuid": "^3.3.2"
   },
   "devDependencies": {
-    "@types/node": "^10.12.3"
+    "@types/node": "^10.14.22",
+    "typescript": "^3.6.4"
   }
 }

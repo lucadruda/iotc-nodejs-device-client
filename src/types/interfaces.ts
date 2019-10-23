@@ -93,7 +93,7 @@ export interface IIoTCClient {
      * @param eventName name of the event to listen
      * @param callback function to execute when event triggers
      */
-    on(eventName: string | IOTC_EVENTS, callback: (message: string | Message) => void): void
+    on(eventName: string | IOTC_EVENTS, callback: Callback): void
 
     setLogging(logLevel: string | IOTC_LOGGING): void
 
@@ -105,3 +105,30 @@ export interface IIoTCLogger {
 }
 
 
+export type Command = {
+    interfaceName: string,
+    requestId: string,
+    name: string,
+    requestProperty?: Property
+}
+
+export type Setting = {
+    interfaceName: string,
+    properties?: Property[],
+    version: number
+}
+
+export type Property = {
+    interfaceName: string
+    name: string,
+    value: any,
+    statusCode?: number,
+    statusMessage?: string,
+    version?: number
+}
+
+export type MessageCallback = (message: Message) => void;
+export type SettingsCallback = (settings: Setting[]) => void;
+export type CommandCallback = (command: Command) => void;
+
+export type Callback = MessageCallback | SettingsCallback | CommandCallback;

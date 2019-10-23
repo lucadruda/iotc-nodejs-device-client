@@ -8,7 +8,7 @@ import { DeviceProvisioningTransport, DeviceSecurityClient } from './types/inter
 import { X509 } from 'azure-iot-common';
 import { X509Security } from 'azure-iot-security-x509';
 import { DPS_DEFAULT_ENDPOINT, DeviceTransport } from './types/constants';
-import { capitalizeFirst } from './utils/stringUtils';
+import { capitalizeFirst } from './utils/commons';
 import { SymmetricKeySecurityClient } from 'azure-iot-security-symmetric-key';
 
 

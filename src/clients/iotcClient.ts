@@ -1,7 +1,7 @@
 // Copyright (c) Luca Druda. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-import { IIoTCClient, ConnectionError, Result, IIoTCLogger } from "../types/interfaces";
+import { IIoTCClient, ConnectionError, Result, IIoTCLogger, Command, Property, SettingsCallback, CommandCallback, Setting, Callback, MessageCallback } from "../types/interfaces";
 import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_OK, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, DPS_DEFAULT_ENDPOINT, IOTC_LOGGING, IOTC_PROTOCOL } from "../types/constants";
 import { X509, Message, callbackToPromise } from "azure-iot-common";
 import * as util from 'util';
@@ -10,6 +10,7 @@ import { ConsoleLogger } from "../consoleLogger";
 import { log, error } from "util";
 import { DeviceProvisioning } from "../provision";
 import * as rhea from 'rhea';
+import { isObject } from "../utils/commons";
 
 export class IoTCClient implements IIoTCClient {
 
@@ -66,9 +67,24 @@ export class IoTCClient implements IIoTCClient {
     sendEvent(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
         return this.sendMessage(payload, timestamp, callback);
     }
-    sendProperty(payload: any, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        // payload = JSON.stringify(payload);
-        this.logger.log(`Sending property ${payload}`);
+    sendProperty(property: Property, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
+        this.logger.log(`Sending property ${property.name}`);
+        let payload = {
+            [property.interfaceName]: {
+                [property.name]: {
+                    value: property.value
+                }
+            }
+        };
+        if (property.statusCode) {
+            payload[property.interfaceName][property.name]['sc'] = property.statusCode;
+        }
+        if (property.statusMessage && property.statusMessage.length > 0) {
+            payload[property.interfaceName][property.name]['sd'] = property.statusMessage;
+        }
+        if (property.version && property.version > 0) {
+            payload[property.interfaceName][property.name]['sv'] = property.version;
+        }
         if (callback) {
             this.twin.properties.reported.update(payload, callback);
         }
@@ -160,7 +176,7 @@ export class IoTCClient implements IIoTCClient {
     }
 
 
-    on(eventName: string | IOTC_EVENTS, callback: (message: string | any) => void): void {
+    on(eventName: string | IOTC_EVENTS, callback: Callback): void {
         if (typeof (eventName) == 'number') {
             eventName = IOTC_EVENTS[eventName];
         }
@@ -169,7 +185,7 @@ export class IoTCClient implements IIoTCClient {
         const messageSent = eventName.match(/^MessageSent$|MessageSent\.([\S]+)/); // matches "MessageSent" or "MessageSent.settingname"
         const command = eventName.match(/^Command$|Command\.([\S]+)/); // matches "Command" or "Command.commandName"
         if (settings) {
-            this.onSettingsUpdated(settings[1], callback);
+            this.onSettingsUpdated(settings[1], callback as SettingsCallback);
         }
         else if (messageReceived) {
             this.onMessageReceived(messageReceived[1], callback);
@@ -178,10 +194,10 @@ export class IoTCClient implements IIoTCClient {
             this.onMessageSent(messageSent[1], callback);
         }
         else if (command) {
-            this.onCommand(command[1], callback);
+            this.onCommand(command[1], callback as CommandCallback);
         }
         else {
-            this.deviceClient._transport.on('message', callback);
+            this.deviceClient._transport.on('message', callback as MessageCallback);
         }
     }
 
@@ -229,26 +245,44 @@ export class IoTCClient implements IIoTCClient {
         }
     }
 
-    private onSettingsUpdated(settingName: string, callback) {
+    private onSettingsUpdated(settingName: string, callback: SettingsCallback) {
         if (settingName) {
             settingName = `.${settingName}`;
         }
         return this.twin.on(`properties.desired${settingName ? settingName : ''}`, (settings) => {
-            let changed = {};
-            Object.getOwnPropertyNames(settings).forEach((setting) => {
-                this.logger.log(`Value of ${setting} changed.`)
-                if (setting === "$version") {
+            console.log(`Settings:${JSON.stringify(settings)}`);
+            let changed: Setting[] = [];
+            Object.getOwnPropertyNames(settings).forEach((settingName) => {
+                this.logger.log(`Value of ${settingName} changed.`)
+                if (settingName === "$version") {
                     return;
                 }
-                let reported = this.twin.properties.reported[setting];
-                if (!reported || reported.desiredVersion != settings.$version) {
-                    changed[setting] = settings[setting];
+                let setting = settings[settingName];
+                if (settingName.startsWith('$iotin:') && isObject(setting)) {
+                    // this is an interface. loop through capabilities
+                    let set: Setting = {
+                        interfaceName: settingName,
+                        version: settings.$version
+                    };
+                    Object.keys(setting).forEach(property => {
+                        let prop: Property = {
+                            interfaceName: settingName,
+                            name: property,
+                            value: setting[property]['value']
+                        };
+                        if (!set.properties) {
+                            set.properties = [];
+                        }
+                        // check if prop has been changed
+                        let reported = this.twin.properties.reported;
+                        console.log(JSON.stringify(reported));
+                        set.properties.push(prop);
+                    });
+                    changed.push(set);
                 }
+
             });
-            if (Object.keys(changed).length > 0) {
-                changed["$version"] = settings.$version;
-                callback(changed);
-            }
+            callback(changed);
         });
     }
     private onMessageSent(settingName: string, callback) {
@@ -266,11 +300,11 @@ export class IoTCClient implements IIoTCClient {
 
     public setLogging(logLevel: string | IOTC_LOGGING) {
         this.logger.setLogLevel(logLevel);
-        this.logger.log(`Log level set to ${logLevel}`);
+        this.logger.log(`Log level set to ${IOTC_LOGGING[logLevel]}`);
     }
 
 
-    private onCommand(commandName: string, callback) {
+    private onCommand(commandName: string, callback: CommandCallback) {
         if (!commandName) {
             if (this.protocol == DeviceTransport.MQTT) {
                 this.deviceClient._transport.enableMethods((err) => {
@@ -307,29 +341,43 @@ export class IoTCClient implements IIoTCClient {
         }
     }
 
-    private respondToCommand(requestId: string, commandName: string, payload: any, callback, resp?: DeviceMethodResponse) {
+    private respondToCommand(requestId: string, commandName: string, payload: any, callback: CommandCallback, resp?: DeviceMethodResponse) {
+        const matches = commandName.match(/^\$iotin:([\S]+)\*([\S]+)/);
+        if (matches.length <= 1) {
+            // bad name
+            return;
+        }
+        let command: Command = {
+            interfaceName: matches[1],
+            name: matches[2],
+            requestId
+        }
+        try {
+            let commandRequest = JSON.parse(payload.toString());
+            let prop: Property = {
+                name: command.name,
+                interfaceName: command.interfaceName,
+                value: commandRequest.commandRequest.value
+            }
+            command.requestProperty = prop;
+        }
+        catch (e) {
+            //commandRequest not an object
+        }
         if (resp) {
-            resp.send(200, { message: 'received' }, (err) => {
-                callback({
-                    requestId,
-                    commandName,
-                    payload
-                });
+            resp.send(201, { message: 'received' }, (err) => {
+                callback(command);
             });
             return;
         }
         resp = new DeviceMethodResponse(requestId, this.deviceClient._transport);
-        resp.send(200, { message: 'received' });
+        resp.send(201, { message: 'received' });
         this.deviceClient._transport.sendMethodResponse(resp, (err) => {
             if (err) {
                 throw new Error('Can\'t reply to command');
             }
         });
-        callback({
-            requestId,
-            commandName,
-            payload
-        });
+        callback(command);
     }
 
 }

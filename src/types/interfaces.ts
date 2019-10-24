@@ -5,6 +5,7 @@ import { X509ProvisioningTransport, TpmProvisioningTransport, X509SecurityClient
 import { X509, Message } from "azure-iot-common";
 import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, IOTC_LOGGING } from "./constants";
 import { SymmetricKeySecurityClient } from "azure-iot-security-symmetric-key";
+import { DeviceMethodResponse } from "azure-iot-device";
 
 export class ConnectionError extends Error {
     constructor(message: string, public code: IOTC_CONNECTION_ERROR) {
@@ -109,6 +110,7 @@ export type Command = {
     interfaceName: string,
     requestId: string,
     name: string,
+    response: DeviceMethodResponse,
     requestProperty?: Property
 }
 

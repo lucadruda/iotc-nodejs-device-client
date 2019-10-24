@@ -350,7 +350,8 @@ export class IoTCClient implements IIoTCClient {
         let command: Command = {
             interfaceName: matches[1],
             name: matches[2],
-            requestId
+            requestId,
+            response: resp ? resp : new DeviceMethodResponse(requestId, this.deviceClient._transport)
         }
         try {
             let commandRequest = JSON.parse(payload.toString());
@@ -364,19 +365,6 @@ export class IoTCClient implements IIoTCClient {
         catch (e) {
             //commandRequest not an object
         }
-        if (resp) {
-            resp.send(201, { message: 'received' }, (err) => {
-                callback(command);
-            });
-            return;
-        }
-        resp = new DeviceMethodResponse(requestId, this.deviceClient._transport);
-        resp.send(201, { message: 'received' });
-        this.deviceClient._transport.sendMethodResponse(resp, (err) => {
-            if (err) {
-                throw new Error('Can\'t reply to command');
-            }
-        });
         callback(command);
     }
 

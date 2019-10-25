@@ -22,6 +22,8 @@ export type DeviceProvisioningTransport = X509ProvisioningTransport | TpmProvisi
 
 export type DeviceSecurityClient = X509SecurityClient | TpmSecurityClient | SymmetricKeySecurityClient;
 
+export type SendCallback = (err: Error, result: Result) => void;
+
 
 export interface IIoTCClient {
 
@@ -53,11 +55,11 @@ export interface IIoTCClient {
     /**
      * Disconnect device. Client cannot be reused after disconnect!!!
      */
-    disconnect(callback?: (err: Error, result: Result) => void): void,
+    disconnect(callback?: SendCallback): void,
     /**
      * Connect the device
      */
-    connect(callback?: (err: Error, result: Result) => void): void,
+    connect(callback?: SendCallback): void,
     /**
      * 
      * @param payload Message to send: can be any type (usually json) or a collection of messages
@@ -65,7 +67,7 @@ export interface IIoTCClient {
      * @param [callback] Function to execute when message gets delivered
      * @returns void or Promise<Result>
      */
-    sendTelemetry(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): Promise<Result> | void,
+    sendTelemetry(payload: any, timestamp?: string, callback?: SendCallback): Promise<Result> | void,
     /**
     * 
     * @param payload State to send: can be any type (usually json) or a collection of states
@@ -73,7 +75,7 @@ export interface IIoTCClient {
     * @param [callback] Function to execute when state information gets delivered
     * @returns void or Promise<Result>
     */
-    sendState(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): Promise<Result> | void,
+    sendState(payload: any, timestamp?: string, callback?: SendCallback): Promise<Result> | void,
     /**
      * 
      * @param payload Event to send: can be any type (usually json) or a collection of events
@@ -81,14 +83,14 @@ export interface IIoTCClient {
      * @param [callback] Function to execute when events gets triggered
      * @returns void or Promise<Result>
      */
-    sendEvent(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): Promise<Result> | void,
+    sendEvent(payload: any, timestamp?: string, callback?: SendCallback): Promise<Result> | void,
     /**
     * 
     * @param payload Property to send: can be any type (usually json) or a collection of properties
     * @param [callback] Function to execute when property gets set
     * @returns void or Promise<Result>
     */
-    sendProperty(payload: any, callback?: (err: Error, result: Result) => void): Promise<Result> | void,
+    sendProperty(payload: any, callback?: SendCallback): Promise<Result> | void,
     /**
      * 
      * @param eventName name of the event to listen
@@ -103,6 +105,7 @@ export interface IIoTCClient {
 export interface IIoTCLogger {
     setLogLevel(logLevel: string | IOTC_LOGGING): void;
     log(message: string): void;
+    debug(message: string): void;
 }
 
 
@@ -111,14 +114,14 @@ export type Command = {
     requestId: string,
     name: string,
     response: DeviceMethodResponse,
-    requestProperty?: Property
+    requestProperty?: Property,
+    aknowledge(): void | Promise<Result>,
+    aknowledge(message: string): void | Promise<Result>,
+    aknowledge(callback: SendCallback): void | Promise<Result>,
+    aknowledge(message: string, callback: SendCallback): void | Promise<Result>,
+    update: (callback?: SendCallback) => void | Promise<Result>
 }
 
-export type Setting = {
-    interfaceName: string,
-    properties?: Property[],
-    version: number
-}
 
 export type Property = {
     interfaceName: string
@@ -127,6 +130,14 @@ export type Property = {
     statusCode?: number,
     statusMessage?: string,
     version?: number
+}
+
+export type Setting = Property & {
+    interfaceName: string,
+    aknowledge(): void | Promise<Result>,
+    aknowledge(message: string): void | Promise<Result>,
+    aknowledge(callback: SendCallback): void | Promise<Result>,
+    aknowledge(message: string, callback: SendCallback): void | Promise<Result>
 }
 
 export type MessageCallback = (message: Message) => void;

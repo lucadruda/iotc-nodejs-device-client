@@ -1,7 +1,7 @@
 // Copyright (c) Luca Druda. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-import { IIoTCClient, ConnectionError, Result, IIoTCLogger, Command, Property, SettingsCallback, CommandCallback, Setting, Callback, MessageCallback } from "../types/interfaces";
+import { IIoTCClient, ConnectionError, Result, IIoTCLogger, Command, Property, SettingsCallback, CommandCallback, Setting, Callback, MessageCallback, SendCallback } from "../types/interfaces";
 import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_OK, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, DPS_DEFAULT_ENDPOINT, IOTC_LOGGING, IOTC_PROTOCOL } from "../types/constants";
 import { X509, Message, callbackToPromise } from "azure-iot-common";
 import * as util from 'util';
@@ -68,7 +68,6 @@ export class IoTCClient implements IIoTCClient {
         return this.sendMessage(payload, timestamp, callback);
     }
     sendProperty(property: Property, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        this.logger.log(`Sending property ${property.name}`);
         let payload = {
             [property.interfaceName]: {
                 [property.name]: {
@@ -86,10 +85,12 @@ export class IoTCClient implements IIoTCClient {
             payload[property.interfaceName][property.name]['sv'] = property.version;
         }
         if (callback) {
+            this.logger.debug(`Sending property ${property.name}. Payload: ${payload}`);
             this.twin.properties.reported.update(payload, callback);
         }
         else {
             return new Promise<Result>((resolve, reject) => {
+                this.logger.debug(`Sending property ${property.name}. Payload: ${JSON.stringify(payload)}`);
                 this.twin.properties.reported.update(payload, (err) => {
                     if (err) {
                         reject(err);
@@ -249,38 +250,57 @@ export class IoTCClient implements IIoTCClient {
         if (settingName) {
             settingName = `.${settingName}`;
         }
-        return this.twin.on(`properties.desired${settingName ? settingName : ''}`, (settings) => {
-            console.log(`Settings:${JSON.stringify(settings)}`);
+        return this.twin.on(`properties.desired${settingName ? settingName : ''}`, (payload) => {
+            // console.log(`Settings:${JSON.stringify(settings)}`);
             let changed: Setting[] = [];
-            Object.getOwnPropertyNames(settings).forEach((settingName) => {
-                this.logger.log(`Value of ${settingName} changed.`)
-                if (settingName === "$version") {
+            Object.getOwnPropertyNames(payload).forEach((interfaceName) => {
+                this.logger.debug(`Settings in ${interfaceName} changed.`)
+                if (interfaceName === "$version") {
                     return;
                 }
-                let setting = settings[settingName];
-                if (settingName.startsWith('$iotin:') && isObject(setting)) {
+                let inf = payload[interfaceName];
+                if (interfaceName.startsWith('$iotin:') && isObject(inf)) {
+                    let client = this;
                     // this is an interface. loop through capabilities
-                    let set: Setting = {
-                        interfaceName: settingName,
-                        version: settings.$version
-                    };
-                    Object.keys(setting).forEach(property => {
-                        let prop: Property = {
-                            interfaceName: settingName,
-                            name: property,
-                            value: setting[property]['value']
-                        };
-                        if (!set.properties) {
-                            set.properties = [];
+                    Object.keys(inf).forEach(settingName => {
+                        let setting: Setting = {
+                            interfaceName,
+                            name: settingName,
+                            value: inf[settingName].value,
+                            version: payload.$version,
+                            aknowledge(this: Setting, param1?: string | SendCallback, param2?: string | SendCallback) {
+                                let statusMessage = 'registered';
+                                let callback = null;
+                                if (param1) {
+                                    if ((typeof param1) === 'string' && param1.length > 0) {
+                                        statusMessage = param1 as string;
+                                    }
+                                    else {
+                                        callback = param1 as SendCallback;
+                                    }
+                                }
+                                if (param2) {
+                                    callback = param2 as SendCallback;
+                                }
+                                let prop = {
+                                    ...this,
+                                    statusCode: 201,
+                                    version: payload.$version,
+                                    statusMessage
+                                };
+                                if (callback) {
+                                     client.sendProperty.bind(client)(prop, callback);
+                                }
+                                else {
+                                    return client.sendProperty.bind(client)(prop) as Promise<Result>;
+                                }
+                            }
                         }
-                        // check if prop has been changed
                         let reported = this.twin.properties.reported;
                         console.log(JSON.stringify(reported));
-                        set.properties.push(prop);
+                        changed.push(setting);
                     });
-                    changed.push(set);
                 }
-
             });
             callback(changed);
         });
@@ -351,7 +371,9 @@ export class IoTCClient implements IIoTCClient {
             interfaceName: matches[1],
             name: matches[2],
             requestId,
-            response: resp ? resp : new DeviceMethodResponse(requestId, this.deviceClient._transport)
+            response: resp ? resp : new DeviceMethodResponse(requestId, this.deviceClient._transport),
+            aknowledge() { },
+            update() { }
         }
         try {
             let commandRequest = JSON.parse(payload.toString());

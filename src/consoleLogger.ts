@@ -4,6 +4,10 @@ import { IIoTCLogger } from "./types/interfaces";
 import { IOTC_LOGGING } from "./types/constants";
 
 export class ConsoleLogger implements IIoTCLogger {
+    debug(message: string): void {
+        if (this.loggerLevel == IOTC_LOGGING.ALL)
+            console.debug(message);
+    }
     setLogLevel(logLevel: string | IOTC_LOGGING): void {
         if (typeof (logLevel) == 'string') {
             this.loggerLevel = IOTC_LOGGING[logLevel.toUpperCase()];

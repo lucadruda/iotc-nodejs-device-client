@@ -1,37 +1,39 @@
 import { IoTCClient } from '.';
 import { IOTC_CONNECT, IOTC_EVENTS, IOTC_LOGGING } from './types/constants';
-import { Command, Setting } from './types/interfaces';
+import { Setting, ICommand } from './types/interfaces';
 
-const client = new IoTCClient('pnpsettings', '0ne00087AE9', IOTC_CONNECT.SYMM_KEY, 'C1C31svc6EolNLVFWzCl8MhMiN2T7FLtfTNnhs7TPD1cyaYR4X5Ij3KykHnNw8NVPQ5WI8POWD7xaLHup6up5g==');
+const client = new IoTCClient('pnpsettings', '0ne0008CE34', IOTC_CONNECT.SYMM_KEY, 'RzmmaPBIjcTXyi4jDAWRFkW+PSVoGQT/7/bv1PrYqLUqlNulDR+lEpr/GgK22xRBkp/3oL663COnpZuoGbFYVw==');
 (async () => {
     try {
-        client.setModelId('urn:ludrudaPnp:NodeDev_2uo:7');
+        client.setModelId('urn:lucapnpprev:PnPTemplate_1zi:2');
         client.setLogging(IOTC_LOGGING.ALL);
         await client.connect();
         //@ts-ignore
         console.log(client.deviceClient._transport._mqtt._config.sharedAccessSignature);
         console.log(client.getConnectionString());
-        setInterval(async () => {
-            await client.sendTelemetry({
-                temp: Math.floor(Math.random() * 100),
-                hum: Math.floor(Math.random() * 100)
-            })
-        }, 3000);
-        client.sendProperty({
-            interfaceName: '$iotin:NodeDev_v2_1ym',
-            name: 'fanSpeed',
-            value: Math.floor(Math.random() * 100)
-        });
-        client.on(IOTC_EVENTS.Command, async (cmd: Command) => {
-            if (cmd.name == 'updFW') {
-                cmd.response.send(200, 'Update completed');
+        // setInterval(async () => {
+        //     await client.sendTelemetry({
+        //         temp: Math.floor(Math.random() * 100),
+        //         hum: Math.floor(Math.random() * 100)
+        //     })
+        // }, 3000);
+        // client.sendProperty({
+        //     interfaceName: '$iotin:NodeDev_v2_1ym',
+        //     name: 'fanSpeed',
+        //     value: Math.floor(Math.random() * 100)
+        // });
+        client.on(IOTC_EVENTS.Command, async (cmd: ICommand) => {
+            if (cmd.name == 'updFirmware') {
+                await cmd.aknowledge(true, 'Update completed');
             }
-            else if (cmd.name == 'downloadModel') {
-                await cmd.response.send(201, 'Start Downloading');
-                setTimeout(async () => {
-
-                }, 5000);
-            }
+            else
+                if (cmd.name == 'downloadModel') {
+                    await cmd.aknowledge(true, 'Command received');
+                    await cmd.update('Download in progress');
+                    setTimeout(async () => {
+                        await cmd.update('Download in progress');
+                    }, 5000);
+                }
         });
         client.on(IOTC_EVENTS.SettingsUpdated, (settings: Setting[]) => {
             settings.forEach(setting => {

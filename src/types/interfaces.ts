@@ -6,6 +6,7 @@ import { X509, Message } from "azure-iot-common";
 import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, IOTC_LOGGING } from "./constants";
 import { SymmetricKeySecurityClient } from "azure-iot-security-symmetric-key";
 import { DeviceMethodResponse } from "azure-iot-device";
+import Command from "./command";
 
 export class ConnectionError extends Error {
     constructor(message: string, public code: IOTC_CONNECTION_ERROR) {
@@ -109,17 +110,19 @@ export interface IIoTCLogger {
 }
 
 
-export type Command = {
+export interface ICommand {
     interfaceName: string,
     requestId: string,
     name: string,
-    response: DeviceMethodResponse,
     requestProperty?: Property,
-    aknowledge(): void | Promise<Result>,
-    aknowledge(message: string): void | Promise<Result>,
-    aknowledge(callback: SendCallback): void | Promise<Result>,
-    aknowledge(message: string, callback: SendCallback): void | Promise<Result>,
-    update: (callback?: SendCallback) => void | Promise<Result>
+    aknowledge(sync: boolean): void | Promise<Result>,
+    aknowledge(sync: boolean, message: string): void | Promise<Result>,
+    aknowledge(sync: boolean, callback: SendCallback): void | Promise<Result>,
+    aknowledge(sync: boolean, message: string, callback: SendCallback): void | Promise<Result>,
+    update(): void | Promise<Result>,
+    update(message: string): void | Promise<Result>,
+    update(callback: SendCallback): void | Promise<Result>,
+    update(message: string, callback: SendCallback): void | Promise<Result>,
 }
 
 

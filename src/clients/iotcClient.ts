@@ -1,8 +1,8 @@
 // Copyright (c) Luca Druda. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-import { IIoTCClient, ConnectionError, Result, IIoTCLogger, Command, Property, SettingsCallback, CommandCallback, Setting, Callback, MessageCallback, SendCallback } from "../types/interfaces";
-import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_OK, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, DPS_DEFAULT_ENDPOINT, IOTC_LOGGING, IOTC_PROTOCOL } from "../types/constants";
+import { IIoTCClient, ConnectionError, Result, IIoTCLogger, Property, SettingsCallback, CommandCallback, Setting, Callback, MessageCallback, SendCallback } from "../types/interfaces";
+import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_OK, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, DPS_DEFAULT_ENDPOINT, IOTC_LOGGING, IOTC_PROTOCOL, IOTC_MESSAGE } from "../types/constants";
 import { X509, Message, callbackToPromise } from "azure-iot-common";
 import * as util from 'util';
 import { Client as DeviceClient, Twin, DeviceMethodResponse } from 'azure-iot-device';
@@ -11,6 +11,7 @@ import { log, error } from "util";
 import { DeviceProvisioning } from "../provision";
 import * as rhea from 'rhea';
 import { isObject } from "../utils/commons";
+import Command from "../types/command";
 
 export class IoTCClient implements IIoTCClient {
 
@@ -59,13 +60,13 @@ export class IoTCClient implements IIoTCClient {
         throw new Error("Method not implemented.");
     }
     sendTelemetry(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        return this.sendMessage(payload, timestamp, callback);
+        return this.sendMessage(payload, timestamp, null, callback);
     }
     sendState(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        return this.sendMessage(payload, timestamp, callback);
+        return this.sendMessage(payload, timestamp, null, callback);
     }
     sendEvent(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        return this.sendMessage(payload, timestamp, callback);
+        return this.sendMessage(payload, timestamp, null, callback);
     }
     sendProperty(property: Property, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
         let payload = {
@@ -202,7 +203,7 @@ export class IoTCClient implements IIoTCClient {
         }
     }
 
-    sendMessage(payload: any, timestamp?: string, callback?: (err: ConnectionError, result: Result) => void): void | Promise<Result> {
+    sendMessage(payload: any, properties?: any, timestamp?: string, callback?: (err: ConnectionError, result: Result) => void): void | Promise<Result> {
         const clientCallback = (clientErr, clientRes) => {
             if (clientErr) {
                 callback(new ConnectionError(clientErr.message, IOTC_CONNECTION_ERROR.COMMUNICATION_ERROR), null);
@@ -219,6 +220,11 @@ export class IoTCClient implements IIoTCClient {
                 var message = new Message(JSON.stringify(payload));
                 if (timestamp) {
                     message.properties.add('iothub-creation-time-utc', timestamp);
+                }
+                if (properties) {
+                    Object.keys(properties).forEach(propName => {
+                        message.properties.add(propName, properties[propName]);
+                    });
                 }
                 this.deviceClient.sendEvent(message, clientCallback);
             }
@@ -289,15 +295,13 @@ export class IoTCClient implements IIoTCClient {
                                     statusMessage
                                 };
                                 if (callback) {
-                                     client.sendProperty.bind(client)(prop, callback);
+                                    client.sendProperty.bind(client)(prop, callback);
                                 }
                                 else {
                                     return client.sendProperty.bind(client)(prop) as Promise<Result>;
                                 }
                             }
                         }
-                        let reported = this.twin.properties.reported;
-                        console.log(JSON.stringify(reported));
                         changed.push(setting);
                     });
                 }
@@ -367,14 +371,9 @@ export class IoTCClient implements IIoTCClient {
             // bad name
             return;
         }
-        let command: Command = {
-            interfaceName: matches[1],
-            name: matches[2],
-            requestId,
-            response: resp ? resp : new DeviceMethodResponse(requestId, this.deviceClient._transport),
-            aknowledge() { },
-            update() { }
-        }
+
+        let client = this;
+        let command: Command = new Command(client, matches[1], matches[2], requestId);
         try {
             let commandRequest = JSON.parse(payload.toString());
             let prop: Property = {

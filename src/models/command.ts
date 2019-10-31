@@ -1,9 +1,17 @@
-import { ICommand, Property, Result, SendCallback } from './interfaces'
+import { ICommand, Property, Result, SendCallback, CommandExecutionType } from '../types/interfaces'
 import { IoTCClient } from '..';
-import { DeviceMethodResponse, Message } from 'azure-iot-device';
-import { IOTC_MESSAGE } from './constants';
+import { DeviceMethodResponse } from 'azure-iot-device';
+import { IOTC_MESSAGE } from '../types/constants';
+
+const commandUpdateSchemaProperty = 'iothub-message-schema';
+const commandUpdateCommandNameProperty = 'iothub-command-name';
+const commandUpdateRequestIdProperty = 'iothub-command-request-id';
+const commandUpdateStatusCodeProperty = 'iothub-command-statuscode';
+const messageInterfaceInstanceProperty: string = '$.ifname';
 export default class Command implements ICommand {
 
+
+    public type: CommandExecutionType = CommandExecutionType.SYNC;
 
     public requestProperty: Property;
     private response: DeviceMethodResponse;
@@ -22,7 +30,7 @@ export default class Command implements ICommand {
             }
         }
     }
-    aknowledge(sync: boolean, param1?: any, param2?: any) {
+    aknowledge(param1?: any, param2?: any) {
         //@ts-ignore
         const response = this.response ? this.response : new DeviceMethodResponse(this.requestId, this.client.deviceClient._transport);
         let statusMessage = 'executed';
@@ -40,12 +48,12 @@ export default class Command implements ICommand {
         }
 
         if (callback) {
-            response.send(sync ? 200 : 201, statusMessage, callback);
+            response.send(this.type == CommandExecutionType.SYNC ? 200 : 202, statusMessage, callback);
         }
         else {
             return new Promise<Result>(async (resolve, reject) => {
                 try {
-                    await response.send(sync ? 200 : 201, statusMessage);
+                    await response.send(this.type == CommandExecutionType.SYNC ? 200 : 202, statusMessage);
                     resolve(new Result(IOTC_MESSAGE.ACCEPTED));
                 }
                 catch (err) {
@@ -56,11 +64,7 @@ export default class Command implements ICommand {
     }
 
     update(param1?: any, param2?: any) {
-        const commandUpdateSchemaProperty = 'iothub-message-schema';
-        const commandUpdateCommandNameProperty = 'iothub-command-name';
-        const commandUpdateRequestIdProperty = 'iothub-command-request-id';
-        const commandUpdateStatusCodeProperty = 'iothub-command-statuscode';
-        const messageInterfaceInstanceProperty: string = '$.ifname';
+
         let statusMessage = 'executed';
         let callback = null;
         if (param1) {

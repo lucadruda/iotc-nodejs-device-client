@@ -6,7 +6,7 @@ import { X509, Message } from "azure-iot-common";
 import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, IOTC_LOGGING } from "./constants";
 import { SymmetricKeySecurityClient } from "azure-iot-security-symmetric-key";
 import { DeviceMethodResponse } from "azure-iot-device";
-import Command from "./command";
+import Command from "../models/command";
 
 export class ConnectionError extends Error {
     constructor(message: string, public code: IOTC_CONNECTION_ERROR) {
@@ -109,16 +109,23 @@ export interface IIoTCLogger {
     debug(message: string): void;
 }
 
+export enum CommandExecutionType {
+    SYNC,
+    ASYNC
+}
+interface Acknowledgable {
+    aknowledge(): void | Promise<Result>,
+    aknowledge(message: string): void | Promise<Result>,
+    aknowledge(callback: SendCallback): void | Promise<Result>,
+    aknowledge(message: string, callback: SendCallback): void | Promise<Result>
+}
 
-export interface ICommand {
+export interface ICommand extends Acknowledgable {
     interfaceName: string,
     requestId: string,
     name: string,
     requestProperty?: Property,
-    aknowledge(sync: boolean): void | Promise<Result>,
-    aknowledge(sync: boolean, message: string): void | Promise<Result>,
-    aknowledge(sync: boolean, callback: SendCallback): void | Promise<Result>,
-    aknowledge(sync: boolean, message: string, callback: SendCallback): void | Promise<Result>,
+    type: CommandExecutionType,
     update(): void | Promise<Result>,
     update(message: string): void | Promise<Result>,
     update(callback: SendCallback): void | Promise<Result>,
@@ -135,16 +142,11 @@ export type Property = {
     version?: number
 }
 
-export type Setting = Property & {
-    interfaceName: string,
-    aknowledge(): void | Promise<Result>,
-    aknowledge(message: string): void | Promise<Result>,
-    aknowledge(callback: SendCallback): void | Promise<Result>,
-    aknowledge(message: string, callback: SendCallback): void | Promise<Result>
+export interface ISetting extends Property, Acknowledgable {
 }
 
 export type MessageCallback = (message: Message) => void;
-export type SettingsCallback = (settings: Setting[]) => void;
-export type CommandCallback = (command: Command) => void;
+export type SettingsCallback = (settings: ISetting[]) => void;
+export type CommandCallback = (command: ICommand) => void;
 
 export type Callback = MessageCallback | SettingsCallback | CommandCallback;

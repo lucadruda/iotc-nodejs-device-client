@@ -8,7 +8,7 @@ import { DeviceProvisioningTransport, DeviceSecurityClient } from './types/inter
 import { X509 } from 'azure-iot-common';
 import { X509Security } from 'azure-iot-security-x509';
 import { DPS_DEFAULT_ENDPOINT, DeviceTransport } from './types/constants';
-import { capitalizeFirst } from './utils/commons';
+import { capitalizeFirst, getTransportString, getTransportMod } from './utils/commons';
 import { SymmetricKeySecurityClient } from 'azure-iot-security-symmetric-key';
 
 
@@ -53,22 +53,12 @@ export class DeviceProvisioning {
     }
 
     private async getProvisionTransport(transportType: DeviceTransport): Promise<DeviceProvisioningTransport> {
-        let transportStr = DeviceTransport[transportType].split("_")[0];
-        let mod = capitalizeFirst(transportStr);
-        if (DeviceTransport[transportType].split("_")[1]) {
-            mod = capitalizeFirst(DeviceTransport[transportType].split("_")[1]);
-        }
-        const transport = (await import(`azure-iot-provisioning-device-${transportStr.toLowerCase()}`))[mod];
+        const transport = (await import(`azure-iot-provisioning-device-${getTransportString(transportType)}`))[getTransportMod(transportType)];
         return new transport();
     }
 
     public async getConnectionTransport(transportType: DeviceTransport): Promise<any> {
-        let transportStr = DeviceTransport[transportType].split("_")[0];
-        let mod = capitalizeFirst(transportStr);
-        if (DeviceTransport[transportType].split("_")[1]) {
-            mod = capitalizeFirst(DeviceTransport[transportType].split("_")[1]);
-        }
-        let transportCtr = (await import(`azure-iot-device-${transportStr.toLowerCase()}`))[mod];
+        let transportCtr = (await import(`azure-iot-device-${getTransportString(transportType)}`))[getTransportMod(transportType)];
         return transportCtr;
     }
 

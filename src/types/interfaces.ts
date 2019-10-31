@@ -114,10 +114,10 @@ export enum CommandExecutionType {
     ASYNC
 }
 interface Acknowledgable {
-    aknowledge(): void | Promise<Result>,
-    aknowledge(message: string): void | Promise<Result>,
-    aknowledge(callback: SendCallback): void | Promise<Result>,
-    aknowledge(message: string, callback: SendCallback): void | Promise<Result>
+    acknowledge(): void | Promise<Result>,
+    acknowledge(message: string): void | Promise<Result>,
+    acknowledge(callback: SendCallback): void | Promise<Result>,
+    acknowledge(message: string, callback: SendCallback): void | Promise<Result>
 }
 
 export interface ICommand extends Acknowledgable {

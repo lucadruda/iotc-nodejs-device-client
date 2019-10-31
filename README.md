@@ -1,4 +1,4 @@
-# Microsoft Azure IoTCentral SDK for Node.js
+# Microsoft Azure IoTCentral SDK for Node.js (PnP Preview)
 
 [![Join the chat at https://gitter.im/iotdisc/community](https://badges.gitter.im/iotdisc.svg)](https://gitter.im/iotdisc/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![Licensed under the MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/lucadruda/iotc-nodejs-device-client/blob/master/LICENSE)
@@ -10,7 +10,7 @@
 ## Installing `azure-iotcentral-device-client` and types
 
 ```
-npm install azure-iotcentral-device-client
+npm install azure-iotcentral-device-client@pnp-preview
 ```
 
 ## Samples
@@ -91,18 +91,13 @@ iotc.sendProperty({fieldName:'fieldValue'}, sendCallback);
 ```
 iotc.on('SettingsUpdate', callback);
 ```
-To provide setting sync aknowledgement, the client can send back a property with the same name of the setting and a particular value object.
+To provide setting sync aknowledgement, just call the _acknowledge()_ method.
 ```
-iotc.on('SettingsUpdated', (val) => {
-            Object.keys(val).forEach(setting => {
-                iotc.sendProperty({
-                    [setting]: {
-                        value: val[setting].value,
-                        status: 'completed',
-                        desiredVersion: val.$version,
-                        message: 'whatever'
-                    }
-                });
+iotc.on('SettingsUpdated',(settings: ISetting[]) => {
+            settings.forEach(setting => {
+                // do work
+                setting.acknowledge('ack',[callback]);
+                // or setting.acknoledge() with no message
             });
         });
 ```
@@ -111,16 +106,26 @@ iotc.on('SettingsUpdated', (val) => {
 ```
 iotc.on('Command',callback);
 ```
-To provide feedbacks for the command like execution result or progress, the client can send back a property with the same name of the executing command.
+To provide feedbacks for a command execution result or progress, call _acknowledge()_ or _update()_ respectively. Remember to specify the command type to better handle progress.
 ```
-iotc.on('Command', (cmd) => {
-    // send execution start feedback
-    iotc.sendProperty({
-                [cmd.commandName]: { 
-                    value: 'Command execution started at ' + new Date().toISOString(),
-                    requestId:cmd.requestId
-                    }
-            }, sendCallback);
+iotc.on('Command', (cmd: ICommand) => {
+            if (cmd.name == 'updFirmware') {
+                cmd.type = CommandExecutionType.SYNC;
+                cmd.acknowledge('Update completed',[callback]);
+            }
+            else
+                if (cmd.name == 'downloadModel') {
+                    cmd.type = CommandExecutionType.ASYNC;
+                    cmd.update('Download in progress')
+                    .then(()=>{
+                        cmd.acknowledge('Command received')
+                        .then(()=>{
+                            setTimeout(async () => {
+                            cmd.update('Download completed');
+                            }, 5000);
+                        });
+                    });
+                }
         });
 ```
 
@@ -128,7 +133,8 @@ iotc.on('Command', (cmd) => {
 A device can send custom data during provision process: if a device is aware of its IoT Central template Id, then it can be automatically provisioned.
 
 ### How to set IoTC template ID in your device
-Template Id can be found in the device explorer page of IoTCentral
+Template Id can be found in the device template page of IoTCentral after selecting "View Identity" on the corresponding Capability Model.
+
 ![Img](assets/modelId.jpg)
 
 Then call this method before connect():
@@ -137,17 +143,21 @@ Then call this method before connect():
 iotc.setModelId('<modelId>');
 ```
 
-### Manual approval (default)
-By default device auto-approval in IoT Central is disabled, which means that administrator needs to approve the device registration to complete the provisioning process.
+### Automatic approval (default)
+By default device auto-approval in IoT Central is enabled, which means a device can be provisioned without any manual action and can start sending/receiving data after status changes to "Provisioned"
+
+### Manual approval
+To change default behavior, administrator can disable device auto-approval from Device Connection page under the Administration section.
+
+![Img](assets/auto_approval.jpg)
+
+
+When disabled, administrator needs to approve the device registration to complete the provisioning process.
 This can be done from explorer page after selecting the device
+
 ![Img](assets/manual_approval.jpg)
 
 
-### Automatic approval
-To change default behavior, administrator can enable device auto-approval from Device Connection page under the Administration section.
-With automatic approval a device can be provisioned without any manual action and can start sending/receiving data after status changes to "Provisioned"
-
-![Img](assets/auto_approval.jpg)
 
 ## Generate x509 certificates
 IoT Central SDK comes with a tool to generate self-signed x509 certificates to be used when testing device connection.

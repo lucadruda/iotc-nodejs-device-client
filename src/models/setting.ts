@@ -17,7 +17,7 @@ export default class Setting implements ISetting {
             this.value = value;
         }
     }
-    aknowledge(param1?: any, param2?: any) {
+    acknowledge(param1?: any, param2?: any) {
         let statusMessage = 'registered';
         let callback = null;
         if (param1) {

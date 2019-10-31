@@ -30,7 +30,7 @@ export default class Command implements ICommand {
             }
         }
     }
-    aknowledge(param1?: any, param2?: any) {
+    acknowledge(param1?: any, param2?: any) {
         //@ts-ignore
         const response = this.response ? this.response : new DeviceMethodResponse(this.requestId, this.client.deviceClient._transport);
         let statusMessage = 'executed';

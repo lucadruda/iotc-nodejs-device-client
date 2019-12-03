@@ -5,8 +5,6 @@ import { X509ProvisioningTransport, TpmProvisioningTransport, X509SecurityClient
 import { X509, Message } from "azure-iot-common";
 import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, IOTC_LOGGING } from "./constants";
 import { SymmetricKeySecurityClient } from "azure-iot-security-symmetric-key";
-import { DeviceMethodResponse } from "azure-iot-device";
-import Command from "../models/command";
 
 export class ConnectionError extends Error {
     constructor(message: string, public code: IOTC_CONNECTION_ERROR) {
@@ -56,11 +54,13 @@ export interface IIoTCClient {
     /**
      * Disconnect device. Client cannot be reused after disconnect!!!
      */
-    disconnect(callback?: SendCallback): void,
+    disconnect(): Promise<Result>,
+    disconnect(callback: SendCallback): void,
     /**
      * Connect the device
      */
-    connect(callback?: SendCallback): void,
+    connect(): Promise<Result>,
+    connect(callback: SendCallback): void,
     /**
      * 
      * @param payload Message to send: can be any type (usually json) or a collection of messages
@@ -68,7 +68,14 @@ export interface IIoTCClient {
      * @param [callback] Function to execute when message gets delivered
      * @returns void or Promise<Result>
      */
-    sendTelemetry(payload: any, timestamp?: string, callback?: SendCallback): Promise<Result> | void,
+    sendTelemetry(payload: any, interfaceName: string, interfaceId: string): Promise<Result>
+    sendTelemetry(payload: any, interfaceName: string, interfaceId: string, callback: SendCallback): void
+    sendTelemetry(payload: any, interfaceName: string, interfaceId: string, properties: any): Promise<Result>
+    sendTelemetry(payload: any, interfaceName: string, interfaceId: string, properties: any, callback: SendCallback): void
+    sendTelemetry(payload: any, interfaceName: string, interfaceId: string, timestamp: string): Promise<Result>
+    sendTelemetry(payload: any, interfaceName: string, interfaceId: string, timestamp: string, callback: SendCallback): void
+    sendTelemetry(payload: any, interfaceName: string, interfaceId: string, properties: any, timestamp: string): Promise<Result>
+    sendTelemetry(payload: any, interfaceName: string, interfaceId: string, properties: any, timestamp: string, callback: SendCallback): void
     /**
     * 
     * @param payload State to send: can be any type (usually json) or a collection of states

@@ -1,7 +1,7 @@
 // Copyright (c) Luca Druda. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-import { IIoTCClient, ConnectionError, Result, IIoTCLogger, Property, SettingsCallback, CommandCallback, Callback, MessageCallback } from "../types/interfaces";
+import { IIoTCClient, ConnectionError, Result, IIoTCLogger, Property, SettingsCallback, CommandCallback, Callback, MessageCallback, SendCallback } from "../types/interfaces";
 import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_OK, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, DPS_DEFAULT_ENDPOINT, IOTC_LOGGING, IOTC_PROTOCOL, IOTC_MESSAGE } from "../types/constants";
 import { X509, Message, } from "azure-iot-common";
 import * as util from 'util';
@@ -24,7 +24,7 @@ export class IoTCClient implements IIoTCClient {
     private deviceProvisioning: DeviceProvisioning;
     private twin: Twin;
     private logger: IIoTCLogger;
-    constructor(readonly id: string, readonly scopeId: string, readonly authenticationType: IOTC_CONNECT | string, readonly options: X509 | string, logger?: IIoTCLogger) {
+    private constructor(readonly id: string, readonly scopeId: string, readonly authenticationType: IOTC_CONNECT | string, readonly options: X509 | string, logger?: IIoTCLogger) {
         if (typeof (authenticationType) == 'string') {
             this.authenticationType = IOTC_CONNECT[authenticationType.toUpperCase()];
         }
@@ -35,6 +35,10 @@ export class IoTCClient implements IIoTCClient {
             this.logger = new ConsoleLogger();
         }
         this.deviceProvisioning = new DeviceProvisioning(this.endpoint);
+    }
+
+    static create(id: string, scopeId: string, authenticationType: IOTC_CONNECT | string, options: X509 | string, logger?: IIoTCLogger): IIoTCClient {
+        return new IoTCClient(id, scopeId, authenticationType, options, logger);
     }
     getConnectionString(): string {
         return this.connectionstring;
@@ -59,9 +63,37 @@ export class IoTCClient implements IIoTCClient {
     setProxy(options: HTTP_PROXY_OPTIONS): void {
         throw new Error("Method not implemented.");
     }
-    sendTelemetry(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
+
+    sendTelemetry(payload: any, interfaceName: string, interfaceId: string, param1?: any, param2?: any, param3?: any): any {
         this.logger.debug(`Sending telemetry ${JSON.stringify(payload)}`);
-        return this.sendMessage(payload, timestamp, null, callback);
+        let callback: SendCallback = null;
+        let properties: any = null;
+        let timestamp: string = null;
+        if (param1) {
+            switch (typeof param1) {
+                case 'object':
+                    properties = param1;
+                    break;
+                case 'string':
+                    timestamp = param1;
+                    break;
+                default:
+                    callback = param1;
+            }
+        }
+        if (param2) {
+            switch (typeof param2) {
+                case 'string':
+                    timestamp = param2;
+                    break;
+                default:
+                    callback = param2;
+            }
+        }
+        if (param3 && (typeof param3 === 'function')) {
+            callback = param3;
+        }
+        return this.sendMessage(payload, interfaceName, interfaceId, properties, timestamp, callback);
     }
     sendState(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
         this.logger.debug(`Sending state ${JSON.stringify(payload)}`);
@@ -209,7 +241,7 @@ export class IoTCClient implements IIoTCClient {
         }
     }
 
-    sendMessage(payload: any, properties?: any, timestamp?: string, callback?: (err: ConnectionError, result: Result) => void): void | Promise<Result> {
+    private sendMessage(payload: any, interfaceName: string, interfaceId: string, properties: any, timestamp: string, callback?: (err: ConnectionError, result: Result) => void): void | Promise<Result> {
         let messages: Message[] = [];
         const clientCallback = (clientErr, clientRes) => {
             if (clientErr) {

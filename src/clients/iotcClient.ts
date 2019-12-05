@@ -12,14 +12,23 @@ import { DeviceProvisioning } from "../provision";
 import * as rhea from 'rhea';
 
 export class IoTCClient implements IIoTCClient {
+    isConnected(): boolean {
+        return this.connected;
+    }
 
 
-
+    private events: {
+        [s in IOTC_EVENTS]?: {
+            callback: (message: string | any) => void,
+            param: any
+        }
+    }
     private protocol: DeviceTransport = DeviceTransport.MQTT;
     private endpoint: string = DPS_DEFAULT_ENDPOINT;
     private connectionstring: string;
     private deviceClient: DeviceClient;
     private deviceProvisioning: DeviceProvisioning;
+    private connected: boolean;
     private twin: Twin;
     private logger: IIoTCLogger;
     private modelId: string;
@@ -34,6 +43,7 @@ export class IoTCClient implements IIoTCClient {
             this.logger = new ConsoleLogger();
         }
         this.deviceProvisioning = new DeviceProvisioning(this.endpoint);
+        this.events = {};
     }
     getConnectionString(): string {
         return this.connectionstring;
@@ -113,13 +123,26 @@ export class IoTCClient implements IIoTCClient {
     }
 
     async connect(): Promise<any> {
+        const connStatusEvent = this.events[IOTC_EVENTS.ConnectionStatus];
         this.logger.log(`Connecting client...`);
         this.connectionstring = await this.register();
         this.deviceClient = DeviceClient.fromConnectionString(this.connectionstring, await this.deviceProvisioning.getConnectionTransport(this.protocol));
+        this.deviceClient.on('disconnect', () => {
+            if (connStatusEvent) {
+                connStatusEvent.callback('disconnected');
+            }
+            this.connected = false;
+
+        })
         try {
             await util.promisify(this.deviceClient.open).bind(this.deviceClient)();
+            this.connected = true;
             if (!(this.protocol == DeviceTransport.HTTP)) {
                 this.twin = await util.promisify(this.deviceClient.getTwin).bind(this.deviceClient)();
+                this.subscribe();
+            }
+            if (connStatusEvent) {
+                connStatusEvent.callback('connected');
             }
         }
         catch (err) {
@@ -166,23 +189,46 @@ export class IoTCClient implements IIoTCClient {
             eventName = IOTC_EVENTS[eventName];
         }
         const settings = eventName.match(/^SettingsUpdated$|SettingsUpdated\.([\S]+)/); // matches "SettingsUpdated" or "SettingsUpdated.settingname"
-        const messageReceived = eventName.match(/^MessageReceived$|MessageReceived\.([\S]+)/); // matches "SettingsUpdated" or "SettingsUpdated.settingname"
-        const messageSent = eventName.match(/^MessageSent$|MessageSent\.([\S]+)/); // matches "MessageSent" or "MessageSent.settingname"
-        const command = eventName.match(/^Command$|Command\.([\S]+)/); // matches "Command" or "Command.commandName"
+        const messageReceived = eventName.match(/^MessageReceived$|MessageReceived\.([\S]+)/);
+        const messageSent = eventName.match(/^MessageSent$|MessageSent\.([\S]+)/);
+        const command = eventName.match(/^Command$|Command\.([\S]+)/);
         if (settings) {
-            this.onSettingsUpdated(settings[1], callback);
+            this.events[IOTC_EVENTS.SettingsUpdated] = {
+                callback,
+                param: settings[1] ? settings[1] : undefined
+            }
+            if (this.connected && this.twin) {
+                this.onSettingsUpdated(settings[1], callback);
+            }
         }
         else if (messageReceived) {
-            this.onMessageReceived(messageReceived[1], callback);
+            this.events[IOTC_EVENTS.MessageReceived] = {
+                callback,
+                param: messageReceived[1] ? messageReceived[1] : undefined
+            }
+            if (this.connected && this.twin) {
+                this.onMessageReceived(messageReceived[1], callback);
+            }
+
         }
         else if (messageSent) {
-            this.onMessageSent(messageSent[1], callback);
+            this.events[IOTC_EVENTS.MessageSent] = {
+                callback,
+                param: messageSent[1] ? messageSent[1] : undefined
+            }
+            if (this.connected && this.twin) {
+                this.onMessageSent(messageSent[1], callback);
+            }
+
         }
         else if (command) {
-            this.onCommand(command[1], callback);
-        }
-        else {
-            this.deviceClient._transport.on('message', callback);
+            this.events[IOTC_EVENTS.Command] = {
+                callback,
+                param: command[1] ? command[1] : undefined
+            }
+            if (this.connected && this.twin) {
+                this.onCommand(command[1], callback);
+            }
         }
     }
 
@@ -227,6 +273,27 @@ export class IoTCClient implements IIoTCClient {
                     reject(new ConnectionError(err.message, IOTC_CONNECTION_ERROR.COMMUNICATION_ERROR));
                 }
             });
+        }
+    }
+
+    private subscribe() {
+        if (this.connected && this.twin) {
+            if (this.events[IOTC_EVENTS.SettingsUpdated]) {
+                const setting = this.events[IOTC_EVENTS.SettingsUpdated];
+                this.onSettingsUpdated(setting.param, setting.callback);
+            }
+            else if (this.events[IOTC_EVENTS.Command]) {
+                const command = this.events[IOTC_EVENTS.Command];
+                this.onCommand(command.param, command.callback);
+            }
+            else if (this.events[IOTC_EVENTS.MessageReceived]) {
+                const msg = this.events[IOTC_EVENTS.MessageReceived];
+                this.onMessageReceived(msg.param, msg.callback);
+            }
+            else if (this.events[IOTC_EVENTS.MessageSent]) {
+                const msg = this.events[IOTC_EVENTS.MessageSent];
+                this.onMessageSent(msg.param, msg.callback);
+            }
         }
     }
 

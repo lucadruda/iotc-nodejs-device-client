@@ -5,6 +5,7 @@ import { X509ProvisioningTransport, TpmProvisioningTransport, X509SecurityClient
 import { X509, Message } from "azure-iot-common";
 import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, IOTC_LOGGING } from "./constants";
 import { SymmetricKeySecurityClient } from "azure-iot-security-symmetric-key";
+import { BaseInterface } from "azure-iot-digitaltwins-device";
 
 export class ConnectionError extends Error {
     constructor(message: string, public code: IOTC_CONNECTION_ERROR) {
@@ -42,6 +43,10 @@ export interface IIoTCClient {
      */
     setModelId(modelId: string): void,
     /**
+     * Set a JSON capability model
+     */
+    setCapabilityModel(model: any): void,
+    /**
      * Set global endpoint for DPS provisioning
      * @param endpoint hostname without protocol
      */
@@ -62,7 +67,7 @@ export interface IIoTCClient {
     connect(): Promise<Result>,
     connect(callback: SendCallback): void,
     /**
-     * 
+     * @description Send telemetry object for a particular interface
      * @param payload Message to send: can be any type (usually json) or a collection of messages
      * @param timestamp Timestamp in ISO format to set custom timestamp instead of now()
      * @param [callback] Function to execute when message gets delivered
@@ -78,6 +83,7 @@ export interface IIoTCClient {
     sendTelemetry(payload: any, interfaceName: string, interfaceId: string, properties: any, timestamp: string, callback: SendCallback): void
     /**
     * 
+    * @description Send state object for a particular interface
     * @param payload State to send: can be any type (usually json) or a collection of states
     * @param timestamp Timestamp in ISO format to set custom timestamp instead of now()
     * @param [callback] Function to execute when state information gets delivered
@@ -93,7 +99,7 @@ export interface IIoTCClient {
      */
     sendEvent(payload: any, timestamp?: string, callback?: SendCallback): Promise<Result> | void,
     /**
-    * 
+    * @description Send a property to an interface
     * @param payload Property to send: can be any type (usually json) or a collection of properties
     * @param [callback] Function to execute when property gets set
     * @returns void or Promise<Result>
@@ -105,8 +111,20 @@ export interface IIoTCClient {
      * @param callback function to execute when event triggers
      */
     on(eventName: string | IOTC_EVENTS, callback: Callback): void
+    /**
+     * 
+     * @param logLevel the log level (disable, api_only, all). Default disable
+     */
+    setLogging(logLevel: string | IOTC_LOGGING): void,
 
-    setLogging(logLevel: string | IOTC_LOGGING): void
+    /**
+     * @description Check if client is connected
+     * @returns check result
+     */
+    isConnected(): boolean,
+
+    addInterface(interfaceName: string, interfaceId: string): void,
+    addInterface(interfaceClass: BaseInterface): void
 
 }
 

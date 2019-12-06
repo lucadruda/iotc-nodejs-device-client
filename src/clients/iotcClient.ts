@@ -2,7 +2,8 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 import { IIoTCClient, ConnectionError, Result, IIoTCLogger, Property, SettingsCallback, CommandCallback, Callback, MessageCallback, SendCallback } from "../types/interfaces";
-import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_OK, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, DPS_DEFAULT_ENDPOINT, IOTC_LOGGING, IOTC_PROTOCOL, IOTC_MESSAGE } from "../types/constants";
+import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_OK, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, DPS_DEFAULT_ENDPOINT, IOTC_LOGGING } from "../types/constants";
+import { DigitalTwinClient, BaseInterface } from 'azure-iot-digitaltwins-device';
 import { X509, Message, } from "azure-iot-common";
 import * as util from 'util';
 import { Client as DeviceClient, Twin, DeviceMethodResponse } from 'azure-iot-device';
@@ -12,19 +13,31 @@ import * as rhea from 'rhea';
 import { isObject, getTransportString } from "../utils/commons";
 import Command from "../models/command";
 import Setting from "../models/setting";
+import { threadId } from "worker_threads";
+
+interface InterfaceType<T extends BaseInterface> {
+    [name: string]: T
+}
 
 export class IoTCClient implements IIoTCClient {
 
-
-
+    private events: {
+        [s in IOTC_EVENTS]?: {
+            callback: (message: string | any) => void,
+            param: any
+        }
+    }
+    private interfaces: InterfaceType<>;
+    private connected: boolean;
     private protocol: DeviceTransport = DeviceTransport.MQTT;
     private endpoint: string = DPS_DEFAULT_ENDPOINT;
     private connectionstring: string;
     private deviceClient: DeviceClient;
     private deviceProvisioning: DeviceProvisioning;
+    private digitalTwinClient: DigitalTwinClient;
     private twin: Twin;
     private logger: IIoTCLogger;
-    private constructor(readonly id: string, readonly scopeId: string, readonly authenticationType: IOTC_CONNECT | string, readonly options: X509 | string, logger?: IIoTCLogger) {
+    private constructor(readonly id: string, readonly scopeId: string, readonly capabilityModelId: string, readonly authenticationType: IOTC_CONNECT | string, readonly options: X509 | string, logger?: IIoTCLogger) {
         if (typeof (authenticationType) == 'string') {
             this.authenticationType = IOTC_CONNECT[authenticationType.toUpperCase()];
         }
@@ -35,10 +48,16 @@ export class IoTCClient implements IIoTCClient {
             this.logger = new ConsoleLogger();
         }
         this.deviceProvisioning = new DeviceProvisioning(this.endpoint);
+        this.setCapabilityModel(capabilityModelId);
+        this.interfaces = {};
     }
 
-    static create(id: string, scopeId: string, authenticationType: IOTC_CONNECT | string, options: X509 | string, logger?: IIoTCLogger): IIoTCClient {
-        return new IoTCClient(id, scopeId, authenticationType, options, logger);
+    static create(id: string, scopeId: string, modelId: string, authenticationType: IOTC_CONNECT | string, options: X509 | string, logger?: IIoTCLogger): IIoTCClient {
+        return new IoTCClient(id, scopeId, modelId, authenticationType, options, logger);
+    }
+
+    isConnected(): boolean {
+        return this.connected;
     }
     getConnectionString(): string {
         return this.connectionstring;
@@ -55,6 +74,10 @@ export class IoTCClient implements IIoTCClient {
     setGlobalEndpoint(endpoint: string): void {
         this.endpoint = endpoint;
         this.logger.log(`Endpoint set to ${endpoint}.`);
+    }
+
+    setCapabilityModel(model: any): void {
+        this.deviceProvisioning.setCapabilityModel(model);
     }
 
     setModelId(modelId: string): void {
@@ -97,10 +120,10 @@ export class IoTCClient implements IIoTCClient {
     }
     sendState(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
         this.logger.debug(`Sending state ${JSON.stringify(payload)}`);
-        return this.sendMessage(payload, timestamp, null, callback);
+        return this.sendMessage(payload, null, null, timestamp, null, callback);
     }
     sendEvent(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        return this.sendMessage(payload, timestamp, null, callback);
+        return this.sendMessage(payload, null, null, timestamp, null, callback);
     }
     sendProperty(property: Property, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
         let payload = {
@@ -119,7 +142,7 @@ export class IoTCClient implements IIoTCClient {
         if (property.version && property.version > 0) {
             payload[property.interfaceName][property.name]['sv'] = property.version;
         }
-        if (callback) {
+        if (callback && typeof callback === 'function') {
             this.logger.debug(`Sending property ${property.name}. Payload: ${payload}`);
             this.twin.properties.reported.update(payload, callback);
         }
@@ -138,9 +161,9 @@ export class IoTCClient implements IIoTCClient {
         }
     }
 
-    disconnect(callback?: (err: Error, result: Result) => void): void | Promise<Result> {
+    disconnect(callback?: (err: Error, result: Result) => void): any {
         this.logger.log(`Disconnecting client...`);
-        if (callback) {
+        if (callback && typeof callback === 'function') {
             this.deviceClient.close((clientErr, clientRes) => {
                 if (clientErr) {
                     callback(new Error(clientErr.message), new Result(IOTC_CONNECTION_ERROR.COMMUNICATION_ERROR));
@@ -166,22 +189,53 @@ export class IoTCClient implements IIoTCClient {
     async connect(): Promise<any> {
         this.logger.log(`Using protocol ${DeviceTransport[this.protocol]}`);
         this.logger.log(`Connecting client...`);
+        const connStatusEvent = this.events[IOTC_EVENTS.ConnectionStatus];
         this.connectionstring = await this.register();
         this.deviceClient = DeviceClient.fromConnectionString(this.connectionstring, await this.deviceProvisioning.getConnectionTransport(this.protocol));
+        this.deviceClient.on('disconnect', () => {
+            if (connStatusEvent) {
+                connStatusEvent.callback('disconnected');
+            }
+            this.connected = false;
+
+        });
         try {
             await util.promisify(this.deviceClient.open).bind(this.deviceClient)();
-            if (!(this.protocol == DeviceTransport.HTTP)) {
+            this.connected = true;
+            this.digitalTwinClient = new DigitalTwinClient(this.capabilityModelId, this.deviceClient);
+            if (this.protocol != DeviceTransport.HTTP) {
                 this.twin = await util.promisify(this.deviceClient.getTwin).bind(this.deviceClient)();
+                this.subscribe();
             }
-            this.logger.debug(`ConnectionString= "${this.connectionstring}"`);
-            this.logger.debug(`SharedAccessSignature= "${this.deviceClient._transport[`_${getTransportString(this.protocol)}`]['_config']['sharedAccessSignature']}"`);
-            this.logger.log(`Client connected to ${this.id}`);
+            if (connStatusEvent) {
+                connStatusEvent.callback('connected');
+            }
         }
         catch (err) {
             throw err;
         }
     }
 
+    private subscribe() {
+        if (this.connected && this.twin) {
+            if (this.events[IOTC_EVENTS.SettingsUpdated]) {
+                const setting = this.events[IOTC_EVENTS.SettingsUpdated];
+                this.onSettingsUpdated(setting.param, setting.callback);
+            }
+            else if (this.events[IOTC_EVENTS.Command]) {
+                const command = this.events[IOTC_EVENTS.Command];
+                this.onCommand(command.param, command.callback);
+            }
+            else if (this.events[IOTC_EVENTS.MessageReceived]) {
+                const msg = this.events[IOTC_EVENTS.MessageReceived];
+                this.onMessageReceived(msg.param, msg.callback);
+            }
+            else if (this.events[IOTC_EVENTS.MessageSent]) {
+                const msg = this.events[IOTC_EVENTS.MessageSent];
+                this.onMessageSent(msg.param, msg.callback);
+            }
+        }
+    }
     /**
      * Implement in derived class based on the security protocol.
      * This is responsible of invoking DPS and creating hub connection string 
@@ -268,7 +322,7 @@ export class IoTCClient implements IIoTCClient {
             });
         }
 
-        if (callback) {
+        if (callback && typeof callback === 'function') {
             if (payload instanceof Array) {
                 this.deviceClient.sendEventBatch(messages, clientCallback);
             }
@@ -397,6 +451,16 @@ export class IoTCClient implements IIoTCClient {
             //commandRequest not an object
         }
         callback(command);
+    }
+
+    addInterface(param1: any, param2?: any) {
+        if (typeof param1 === 'string') {
+
+        }
+        else {
+            const inf = param1 as BaseInterface;
+            this.interfaces[inf.interfaceInstanceName] = inf;
+        }
     }
 
 }

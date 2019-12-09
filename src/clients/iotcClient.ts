@@ -1,33 +1,28 @@
 // Copyright (c) Luca Druda. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-import { IIoTCClient, ConnectionError, Result, IIoTCLogger, Property, SettingsCallback, CommandCallback, Callback, MessageCallback, SendCallback } from "../types/interfaces";
+import { IIoTCClient, ConnectionError, Result, IIoTCLogger, Callback, SendCallback, IIoTCProperty, OperationStatus } from "../types/interfaces";
 import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_OK, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, DPS_DEFAULT_ENDPOINT, IOTC_LOGGING } from "../types/constants";
-import { DigitalTwinClient, BaseInterface } from 'azure-iot-digitaltwins-device';
+import { DigitalTwinClient, BaseInterface, CommandRequest, CommandResponse, Property } from 'azure-iot-digitaltwins-device';
 import { X509, Message, } from "azure-iot-common";
 import * as util from 'util';
-import { Client as DeviceClient, Twin, DeviceMethodResponse } from 'azure-iot-device';
+import { Client as DeviceClient, Twin } from 'azure-iot-device';
 import { ConsoleLogger } from "../consoleLogger";
 import { DeviceProvisioning } from "../provision";
-import * as rhea from 'rhea';
-import { isObject, getTransportString } from "../utils/commons";
-import Command from "../models/command";
-import Setting from "../models/setting";
-import { threadId } from "worker_threads";
+import CommonInterface from "../models/commonInterface";
+import IoTCProperty from "../models/iotcProperty";
+import IoTCCommand from "../models/iotcCommand";
 
-interface InterfaceType<T extends BaseInterface> {
-    [name: string]: T
+interface InterfaceType {
+    [name: string]: BaseInterface
 }
 
 export class IoTCClient implements IIoTCClient {
 
     private events: {
-        [s in IOTC_EVENTS]?: {
-            callback: (message: string | any) => void,
-            param: any
-        }
+        [s in IOTC_EVENTS]?: (message: string | any) => void
     }
-    private interfaces: InterfaceType<>;
+    private interfaces: InterfaceType = {};
     private connected: boolean;
     private protocol: DeviceTransport = DeviceTransport.MQTT;
     private endpoint: string = DPS_DEFAULT_ENDPOINT;
@@ -118,6 +113,39 @@ export class IoTCClient implements IIoTCClient {
         }
         return this.sendMessage(payload, interfaceName, interfaceId, properties, timestamp, callback);
     }
+
+    sendProperty(payload: any, interfaceName: string, interfaceId: string, callback?: any): any {
+        let toSend = [];
+        try {
+            payload = JSON.parse(payload);
+        }
+        catch (e) { }
+        Object.keys(payload).map(propName => {
+            this.logger.debug(`Sending property ${propName} with value ${payload[propName]}`);
+            toSend.push({
+                [`$.iotin:${interfaceName}`]: {
+                    [propName]: {
+                        value: payload[propName]
+                    }
+                }
+            });
+        });
+        if (callback && typeof callback === 'function') {
+            toSend.map(p => {
+                this.twin.properties.reported.update(p, callback);
+            });
+        }
+        else return Promise.all(toSend.map(p => {
+            return new Promise<Result>((resolve, reject) => {
+                this.twin.properties.reported.update(p, (err) => {
+                    if (err) {
+                        reject(err);
+                    }
+                    else resolve({ code: OperationStatus.SUCCESS });
+                });
+            });
+        }));
+    }
     sendState(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
         this.logger.debug(`Sending state ${JSON.stringify(payload)}`);
         return this.sendMessage(payload, null, null, timestamp, null, callback);
@@ -125,41 +153,7 @@ export class IoTCClient implements IIoTCClient {
     sendEvent(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
         return this.sendMessage(payload, null, null, timestamp, null, callback);
     }
-    sendProperty(property: Property, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        let payload = {
-            [property.interfaceName]: {
-                [property.name]: {
-                    value: property.value
-                }
-            }
-        };
-        if (property.statusCode) {
-            payload[property.interfaceName][property.name]['sc'] = property.statusCode;
-        }
-        if (property.statusMessage && property.statusMessage.length > 0) {
-            payload[property.interfaceName][property.name]['sd'] = property.statusMessage;
-        }
-        if (property.version && property.version > 0) {
-            payload[property.interfaceName][property.name]['sv'] = property.version;
-        }
-        if (callback && typeof callback === 'function') {
-            this.logger.debug(`Sending property ${property.name}. Payload: ${payload}`);
-            this.twin.properties.reported.update(payload, callback);
-        }
-        else {
-            return new Promise<Result>((resolve, reject) => {
-                this.logger.debug(`Sending property ${property.name}. Payload: ${JSON.stringify(payload)}`);
-                this.twin.properties.reported.update(payload, (err) => {
-                    if (err) {
-                        reject(err);
-                    }
-                    else {
-                        resolve(new Result(IOTC_CONNECTION_OK));
-                    }
-                });
-            });
-        }
-    }
+
 
     disconnect(callback?: (err: Error, result: Result) => void): any {
         this.logger.log(`Disconnecting client...`);
@@ -271,28 +265,11 @@ export class IoTCClient implements IIoTCClient {
 
 
     on(eventName: string | IOTC_EVENTS, callback: Callback): void {
-        if (typeof (eventName) == 'number') {
+        if (typeof (eventName) === 'string') {
             eventName = IOTC_EVENTS[eventName];
         }
-        const settings = eventName.match(/^SettingsUpdated$|SettingsUpdated\.([\S]+)/); // matches "SettingsUpdated" or "SettingsUpdated.settingname"
-        const messageReceived = eventName.match(/^MessageReceived$|MessageReceived\.([\S]+)/); // matches "SettingsUpdated" or "SettingsUpdated.settingname"
-        const messageSent = eventName.match(/^MessageSent$|MessageSent\.([\S]+)/); // matches "MessageSent" or "MessageSent.settingname"
-        const command = eventName.match(/^Command$|Command\.([\S]+)/); // matches "Command" or "Command.commandName"
-        if (settings) {
-            this.onSettingsUpdated(settings[1], callback as SettingsCallback);
-        }
-        else if (messageReceived) {
-            this.onMessageReceived(messageReceived[1], callback);
-        }
-        else if (messageSent) {
-            this.onMessageSent(messageSent[1], callback);
-        }
-        else if (command) {
-            this.onCommand(command[1], callback as CommandCallback);
-        }
-        else {
-            this.deviceClient._transport.on('message', callback as MessageCallback);
-        }
+        // assign callback to right event
+        this.events[eventName] = callback;
     }
 
     private sendMessage(payload: any, interfaceName: string, interfaceId: string, properties: any, timestamp: string, callback?: (err: ConnectionError, result: Result) => void): void | Promise<Result> {
@@ -349,28 +326,6 @@ export class IoTCClient implements IIoTCClient {
         }
     }
 
-    private onSettingsUpdated(settingName: string, callback: SettingsCallback) {
-        if (settingName) {
-            settingName = `.${settingName}`;
-        }
-        return this.twin.on(`properties.desired${settingName ? settingName : ''}`, (payload) => {
-            // console.log(`Settings:${JSON.stringify(settings)}`);
-            let changed: Setting[] = [];
-            Object.getOwnPropertyNames(payload).forEach((interfaceName) => {
-                if (interfaceName === "$version") {
-                    return;
-                }
-                this.logger.debug(`Settings in ${interfaceName} changed.`)
-                let inf = payload[interfaceName];
-                if (interfaceName.startsWith('$iotin:') && isObject(inf)) {
-                    let client = this;
-                    // this is an interface. loop through capabilities
-                    Object.keys(inf).forEach(settingName => changed.push(new Setting(client, interfaceName, settingName, payload.$version, inf[settingName].value)));
-                }
-            });
-            callback(changed);
-        });
-    }
     private onMessageSent(settingName: string, callback) {
         if (settingName) {
             settingName = `.${settingName}`;
@@ -389,73 +344,31 @@ export class IoTCClient implements IIoTCClient {
         this.logger.log(`Log level set to ${IOTC_LOGGING[logLevel]}`);
     }
 
-
-    private onCommand(commandName: string, callback: CommandCallback) {
-        if (!commandName) {
-            if (this.protocol == DeviceTransport.MQTT) {
-                this.deviceClient._transport.enableMethods((err) => {
-                    if (err) {
-                        throw new Error('Commands can\'t be received');
-                    }
-                    else {
-                        const commandFormat = /\$iothub\/methods\/POST\/([\S]+)\/\?\$rid=([\d])+/;
-                        (<any>this.deviceClient._transport)._mqtt.on('message', (topic, payload) => {
-                            const commandMatch = topic.match(commandFormat);
-                            if (commandMatch) {
-                                this.logger.debug(`Received command ${commandMatch[1]}`);
-                                this.respondToCommand(commandMatch[2], commandMatch[1], payload, callback);
-                            }
-                        });
-                    }
-                });
-
-            }
-            else if (this.protocol == DeviceTransport.AMQP) {
-                this.deviceClient._transport.enableMethods((err) => {
-                    (<any>this.deviceClient._transport)._deviceMethodClient._receiverLink.on('message', (msg) => {
-                        this.logger.debug(`Received command ${msg.application_properties['IoThub-methodname']}`);
-                        this.respondToCommand(rhea.uuid_to_string(msg.correlation_id), msg.application_properties['IoThub-methodname'], JSON.parse(msg.body.content.toString()), callback);
-                    });
-                });
-            }
-            else {
-                throw new Error('Commands are not supported over http');
-            }
-
-        } else {
-            this.deviceClient.onDeviceMethod(commandName, (req, resp) => {
-                this.respondToCommand(req.requestId, req.methodName, req.payload, callback, resp);
-            });
+    private onPropertyUpdated(interfaceObject: BaseInterface, propertyName: string, reportedValue: any, desiredValue: any, version: number): void {
+        const callback = this.events[IOTC_EVENTS.PropertiesUpdated];
+        const prop = new IoTCProperty(propertyName, interfaceObject.interfaceInstanceName, interfaceObject.interfaceId, desiredValue, this.twin, version);
+        this.logger.debug(`Property ${prop.name} in interface ${prop.interfaceName} has been updated with value ${prop.value}`);
+        if (callback && typeof callback === 'function') {
+            callback(prop);
         }
     }
 
-    private respondToCommand(requestId: string, commandName: string, payload: any, callback: CommandCallback, resp?: DeviceMethodResponse) {
-        const matches = commandName.match(/^\$iotin:([\S]+)\*([\S]+)/);
-        if (matches.length <= 1) {
-            // bad name
-            return;
+    private onCommandReceived(request: CommandRequest, response: CommandResponse): void {
+        const callback = this.events[IOTC_EVENTS.Command];
+        const cmd = new IoTCCommand(request.commandName, request.interfaceInstance.interfaceInstanceName, request.interfaceInstance.interfaceId, request.payload, null, response);
+        this.logger.debug(`Received command ${cmd.name} from interface ${cmd.interfaceName} ${cmd.value ? 'with parameter' + cmd.value : ''}`);
+        if (callback && typeof callback === 'function') {
+            callback(cmd);
         }
-
-        let client = this;
-        let command: Command = new Command(client, matches[1], matches[2], requestId);
-        try {
-            let commandRequest = JSON.parse(payload.toString());
-            let prop: Property = {
-                name: command.name,
-                interfaceName: command.interfaceName,
-                value: commandRequest.commandRequest.value
-            }
-            command.requestProperty = prop;
-        }
-        catch (e) {
-            //commandRequest not an object
-        }
-        callback(command);
     }
-
     addInterface(param1: any, param2?: any) {
         if (typeof param1 === 'string') {
-
+            if (!param2 || typeof param2 != 'string') {
+                throw new Error('Invalid interface parameters. Must specify an interface name and id or a interface instance');
+            }
+            else {
+                this.interfaces[param1] = new CommonInterface(param1, param2, this.onPropertyUpdated, this.onCommandReceived);
+            }
         }
         else {
             const inf = param1 as BaseInterface;

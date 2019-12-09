@@ -104,7 +104,8 @@ export interface IIoTCClient {
     * @param [callback] Function to execute when property gets set
     * @returns void or Promise<Result>
     */
-    sendProperty(payload: any, callback?: SendCallback): Promise<Result> | void,
+   sendProperty(payload: any, interfaceName: string, interfaceId: string): Promise<Result>
+   sendProperty(payload: any, interfaceName: string, interfaceId: string, callback: SendCallback): void
     /**
      * 
      * @param eventName name of the event to listen
@@ -134,44 +135,37 @@ export interface IIoTCLogger {
     debug(message: string): void;
 }
 
-export enum CommandExecutionType {
-    SYNC,
-    ASYNC
+
+export enum OperationStatus {
+    SUCCESS = 200,
+    FAILURE = 500
 }
 interface Acknowledgable {
-    acknowledge(): void | Promise<Result>,
-    acknowledge(message: string): void | Promise<Result>,
-    acknowledge(callback: SendCallback): void | Promise<Result>,
-    acknowledge(message: string, callback: SendCallback): void | Promise<Result>
+    acknowledge(status: OperationStatus): Promise<Result>,
+    acknowledge(status: OperationStatus, message: string): Promise<Result>,
+    acknowledge(status: OperationStatus, callback: SendCallback): void,
+    acknowledge(status: OperationStatus, message: string, callback: SendCallback): void
 }
 
-export interface ICommand extends Acknowledgable {
+interface PnPItem {
     interfaceName: string,
-    requestId: string,
-    name: string,
-    requestProperty?: Property,
-    type: CommandExecutionType,
-    update(): void | Promise<Result>,
-    update(message: string): void | Promise<Result>,
-    update(callback: SendCallback): void | Promise<Result>,
-    update(message: string, callback: SendCallback): void | Promise<Result>,
-}
-
-
-export type Property = {
-    interfaceName: string
-    name: string,
+    interfaceId?: string,
     value: any,
-    statusCode?: number,
-    statusMessage?: string,
-    version?: number
+    name: string
 }
 
-export interface ISetting extends Property, Acknowledgable {
+export interface IIoTCProperty extends PnPItem, Acknowledgable {
 }
 
-export type MessageCallback = (message: Message) => void;
-export type SettingsCallback = (settings: ISetting[]) => void;
-export type CommandCallback = (command: ICommand) => void;
+export interface IIoTCCommand extends PnPItem, Acknowledgable {
+    update(status: OperationStatus): Promise<Result>,
+    update(status: OperationStatus, message: string): Promise<Result>,
+    update(status: OperationStatus, callback: SendCallback): void,
+    update(status: OperationStatus, message: string, callback: SendCallback): void,
+}
 
-export type Callback = MessageCallback | SettingsCallback | CommandCallback;
+export type MessagesCallback = (message: Message) => void;
+export type PropertiesCallback = (settings: IIoTCProperty[]) => void;
+export type CommandsCallback = (command: IIoTCCommand) => void;
+
+export type Callback = MessagesCallback | PropertiesCallback | CommandsCallback;

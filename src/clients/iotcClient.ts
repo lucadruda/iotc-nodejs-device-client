@@ -1,28 +1,27 @@
 // Copyright (c) Luca Druda. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-import { IIoTCClient, ConnectionError, Result, IIoTCLogger, Callback, SendCallback, IIoTCProperty, OperationStatus } from "../types/interfaces";
+import { IIoTCClient, ConnectionError, Result, IIoTCLogger, Callback, SendCallback, IIoTCProperty, OperationStatus, IoTCInterface } from "../types/interfaces";
 import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_OK, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, DPS_DEFAULT_ENDPOINT, IOTC_LOGGING } from "../types/constants";
-import { DigitalTwinClient, BaseInterface, CommandRequest, CommandResponse, Property } from 'azure-iot-digitaltwins-device';
+import { DigitalTwinClient, BaseInterface, CommandRequest, CommandResponse, Property, Telemetry } from 'azure-iot-digitaltwins-device';
 import { X509, Message, } from "azure-iot-common";
 import * as util from 'util';
 import { Client as DeviceClient, Twin } from 'azure-iot-device';
 import { ConsoleLogger } from "../consoleLogger";
 import { DeviceProvisioning } from "../provision";
-import CommonInterface from "../models/commonInterface";
-import IoTCProperty from "../models/iotcProperty";
+import { parse } from "./parseClient";
 import IoTCCommand from "../models/iotcCommand";
+import { InterfaceMap } from "../types/capabilities";
+import IoTCProperty from "../models/iotcProperty";
+import CommonInterface from "../models/commonInterface";
 
-interface InterfaceType {
-    [name: string]: BaseInterface
-}
 
 export class IoTCClient implements IIoTCClient {
 
     private events: {
         [s in IOTC_EVENTS]?: (message: string | any) => void
     }
-    private interfaces: InterfaceType = {};
+    private interfaces: InterfaceMap = {};
     private connected: boolean;
     private protocol: DeviceTransport = DeviceTransport.MQTT;
     private endpoint: string = DPS_DEFAULT_ENDPOINT;
@@ -43,8 +42,11 @@ export class IoTCClient implements IIoTCClient {
             this.logger = new ConsoleLogger();
         }
         this.deviceProvisioning = new DeviceProvisioning(this.endpoint);
-        this.setCapabilityModel(capabilityModelId);
+        this.deviceProvisioning.setIoTCModelId(capabilityModelId);
         this.interfaces = {};
+        this.events = {};
+        this.onCommandReceived = this.onCommandReceived.bind(this);
+        this.onPropertyUpdated = this.onPropertyUpdated.bind(this);
     }
 
     static create(id: string, scopeId: string, modelId: string, authenticationType: IOTC_CONNECT | string, options: X509 | string, logger?: IIoTCLogger): IIoTCClient {
@@ -73,6 +75,7 @@ export class IoTCClient implements IIoTCClient {
 
     setCapabilityModel(model: any): void {
         this.deviceProvisioning.setCapabilityModel(model);
+        this.interfaces = { ...this.interfaces, ...parse(model, this.onPropertyUpdated, this.onCommandReceived) };
     }
 
     setModelId(modelId: string): void {
@@ -82,8 +85,9 @@ export class IoTCClient implements IIoTCClient {
         throw new Error("Method not implemented.");
     }
 
-    sendTelemetry(payload: any, interfaceName: string, interfaceId: string, param1?: any, param2?: any, param3?: any): any {
+    sendTelemetry(payload: any, interfaceName: string, param1?: any, param2?: any, param3?: any): any {
         this.logger.debug(`Sending telemetry ${JSON.stringify(payload)}`);
+        let toSend = [];
         let callback: SendCallback = null;
         let properties: any = null;
         let timestamp: string = null;
@@ -111,47 +115,61 @@ export class IoTCClient implements IIoTCClient {
         if (param3 && (typeof param3 === 'function')) {
             callback = param3;
         }
-        return this.sendMessage(payload, interfaceName, interfaceId, properties, timestamp, callback);
+
+        Object.keys(payload).map(telName => {
+            this.logger.debug(`Sending telemetry ${telName} with value ${payload[telName]}`);
+            if (this.interfaces[interfaceName]) {
+                const tel = this.interfaces[interfaceName][telName];
+                if (tel) {
+                    tel['value'] = payload[telName];
+                    toSend.push(tel);
+                }
+            }
+        });
+        if (callback && typeof callback === 'function') {
+            toSend.map(t => {
+                t.send(t.value, callback);
+            });
+        }
+        else {
+            return Promise.all(toSend.map(t => {
+                t.send(t.value);
+            }));
+        }
     }
 
-    sendProperty(payload: any, interfaceName: string, interfaceId: string, callback?: any): any {
-        let toSend = [];
+    sendProperty(payload: any, interfaceName: string, callback?: any): any {
+        let toSend: IoTCProperty[] = [];
         try {
             payload = JSON.parse(payload);
         }
         catch (e) { }
         Object.keys(payload).map(propName => {
             this.logger.debug(`Sending property ${propName} with value ${payload[propName]}`);
-            toSend.push({
-                [`$.iotin:${interfaceName}`]: {
-                    [propName]: {
-                        value: payload[propName]
-                    }
+            if (this.interfaces[interfaceName]) {
+                const prop = this.interfaces[interfaceName][propName];
+                if (prop) {
+                    toSend.push(new IoTCProperty(prop, propName, interfaceName, this.interfaces[interfaceName].interfaceId, payload[propName]));
                 }
-            });
+            }
         });
         if (callback && typeof callback === 'function') {
             toSend.map(p => {
-                this.twin.properties.reported.update(p, callback);
+                p.send(callback);
             });
         }
-        else return Promise.all(toSend.map(p => {
-            return new Promise<Result>((resolve, reject) => {
-                this.twin.properties.reported.update(p, (err) => {
-                    if (err) {
-                        reject(err);
-                    }
-                    else resolve({ code: OperationStatus.SUCCESS });
-                });
-            });
-        }));
+        else {
+            return Promise.all(toSend.map(p => {
+                p.send();
+            }));
+        }
     }
     sendState(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
         this.logger.debug(`Sending state ${JSON.stringify(payload)}`);
-        return this.sendMessage(payload, null, null, timestamp, null, callback);
+        return this.sendMessage(payload, null, timestamp, null, callback);
     }
     sendEvent(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        return this.sendMessage(payload, null, null, timestamp, null, callback);
+        return this.sendMessage(payload, null, timestamp, null, callback);
     }
 
 
@@ -188,7 +206,7 @@ export class IoTCClient implements IIoTCClient {
         this.deviceClient = DeviceClient.fromConnectionString(this.connectionstring, await this.deviceProvisioning.getConnectionTransport(this.protocol));
         this.deviceClient.on('disconnect', () => {
             if (connStatusEvent) {
-                connStatusEvent.callback('disconnected');
+                connStatusEvent('disconnected');
             }
             this.connected = false;
 
@@ -197,12 +215,12 @@ export class IoTCClient implements IIoTCClient {
             await util.promisify(this.deviceClient.open).bind(this.deviceClient)();
             this.connected = true;
             this.digitalTwinClient = new DigitalTwinClient(this.capabilityModelId, this.deviceClient);
-            if (this.protocol != DeviceTransport.HTTP) {
-                this.twin = await util.promisify(this.deviceClient.getTwin).bind(this.deviceClient)();
-                this.subscribe();
-            }
+            Object.keys(this.interfaces).map(inf => {
+                this.digitalTwinClient.addInterfaceInstance(this.interfaces[inf]);
+            });
+            await this.digitalTwinClient.register();
             if (connStatusEvent) {
-                connStatusEvent.callback('connected');
+                connStatusEvent('connected');
             }
         }
         catch (err) {
@@ -210,26 +228,27 @@ export class IoTCClient implements IIoTCClient {
         }
     }
 
-    private subscribe() {
-        if (this.connected && this.twin) {
-            if (this.events[IOTC_EVENTS.SettingsUpdated]) {
-                const setting = this.events[IOTC_EVENTS.SettingsUpdated];
-                this.onSettingsUpdated(setting.param, setting.callback);
-            }
-            else if (this.events[IOTC_EVENTS.Command]) {
-                const command = this.events[IOTC_EVENTS.Command];
-                this.onCommand(command.param, command.callback);
-            }
-            else if (this.events[IOTC_EVENTS.MessageReceived]) {
-                const msg = this.events[IOTC_EVENTS.MessageReceived];
-                this.onMessageReceived(msg.param, msg.callback);
-            }
-            else if (this.events[IOTC_EVENTS.MessageSent]) {
-                const msg = this.events[IOTC_EVENTS.MessageSent];
-                this.onMessageSent(msg.param, msg.callback);
-            }
-        }
-    }
+    // private subscribe() {
+    //     if (this.connected && this.twin) {
+    //         if (this.events[IOTC_EVENTS.PropertiesUpdated]) {
+    //             const propertiesUpdated = this.events[IOTC_EVENTS.PropertiesUpdated];
+    //             this.onPropertyUpdated(setting.param, setting.callback);
+    //         }
+    //         else if (this.events[IOTC_EVENTS.Command]) {
+    //             const command = this.events[IOTC_EVENTS.Command];
+    //             this.onCommand(command.param, command.callback);
+    //         }
+    //         else if (this.events[IOTC_EVENTS.MessageReceived]) {
+    //             const msg = this.events[IOTC_EVENTS.MessageReceived];
+    //             this.onMessageReceived(msg.param, msg.callback);
+    //         }
+    //         else if (this.events[IOTC_EVENTS.MessageSent]) {
+    //             const msg = this.events[IOTC_EVENTS.MessageSent];
+    //             this.onMessageSent(msg.param, msg.callback);
+    //         }
+    //     }
+    // }
+
     /**
      * Implement in derived class based on the security protocol.
      * This is responsible of invoking DPS and creating hub connection string 
@@ -272,7 +291,7 @@ export class IoTCClient implements IIoTCClient {
         this.events[eventName] = callback;
     }
 
-    private sendMessage(payload: any, interfaceName: string, interfaceId: string, properties: any, timestamp: string, callback?: (err: ConnectionError, result: Result) => void): void | Promise<Result> {
+    private sendMessage(payload: any, interfaceName: string, properties: any, timestamp: string, callback?: (err: ConnectionError, result: Result) => void): void | Promise<Result> {
         let messages: Message[] = [];
         const clientCallback = (clientErr, clientRes) => {
             if (clientErr) {
@@ -335,10 +354,6 @@ export class IoTCClient implements IIoTCClient {
             settingName ? settingName : ''}`, callback);
     }
 
-    private onMessageReceived(msgname: string, callback) {
-        this.deviceClient.on(msgname, callback);
-    }
-
     public setLogging(logLevel: string | IOTC_LOGGING) {
         this.logger.setLogLevel(logLevel);
         this.logger.log(`Log level set to ${IOTC_LOGGING[logLevel]}`);
@@ -346,8 +361,8 @@ export class IoTCClient implements IIoTCClient {
 
     private onPropertyUpdated(interfaceObject: BaseInterface, propertyName: string, reportedValue: any, desiredValue: any, version: number): void {
         const callback = this.events[IOTC_EVENTS.PropertiesUpdated];
-        const prop = new IoTCProperty(propertyName, interfaceObject.interfaceInstanceName, interfaceObject.interfaceId, desiredValue, this.twin, version);
-        this.logger.debug(`Property ${prop.name} in interface ${prop.interfaceName} has been updated with value ${prop.value}`);
+        const prop = new IoTCProperty(interfaceObject[propertyName], propertyName, interfaceObject.interfaceInstanceName, interfaceObject.interfaceId, desiredValue, version);
+        this.logger.debug(`Property ${propertyName} in interface ${interfaceObject.interfaceInstanceName} has been updated with value ${desiredValue}`);
         if (callback && typeof callback === 'function') {
             callback(prop);
         }
@@ -361,19 +376,19 @@ export class IoTCClient implements IIoTCClient {
             callback(cmd);
         }
     }
-    addInterface(param1: any, param2?: any) {
-        if (typeof param1 === 'string') {
-            if (!param2 || typeof param2 != 'string') {
-                throw new Error('Invalid interface parameters. Must specify an interface name and id or a interface instance');
-            }
-            else {
-                this.interfaces[param1] = new CommonInterface(param1, param2, this.onPropertyUpdated, this.onCommandReceived);
-            }
+    addInterface(inf: IoTCInterface) {
+        let infClass = new CommonInterface(inf.name, inf.id, this.onPropertyUpdated, this.onCommandReceived);
+        if (inf.properties) {
+            inf.properties.forEach(prop => infClass.addProperty(prop, true));
         }
-        else {
-            const inf = param1 as BaseInterface;
-            this.interfaces[inf.interfaceInstanceName] = inf;
+        if (inf.commands) {
+            inf.commands.forEach(cmd => infClass.addCommand(cmd));
         }
+        if (inf.telemetry) {
+            inf.telemetry.forEach(tel => infClass.addTelemetry(tel));
+        }
+        this.interfaces[inf.name] = infClass;
+
     }
 
 }

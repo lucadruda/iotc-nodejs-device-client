@@ -2,10 +2,9 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 import { X509ProvisioningTransport, TpmProvisioningTransport, X509SecurityClient, TpmSecurityClient } from "azure-iot-provisioning-device/lib/interfaces";
-import { X509, Message } from "azure-iot-common";
-import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, IOTC_LOGGING } from "./constants";
+import { Message } from "azure-iot-common";
+import { HTTP_PROXY_OPTIONS, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, IOTC_LOGGING } from "./constants";
 import { SymmetricKeySecurityClient } from "azure-iot-security-symmetric-key";
-import { BaseInterface } from "azure-iot-digitaltwins-device";
 
 export class ConnectionError extends Error {
     constructor(message: string, public code: IOTC_CONNECTION_ERROR) {
@@ -73,14 +72,14 @@ export interface IIoTCClient {
      * @param [callback] Function to execute when message gets delivered
      * @returns void or Promise<Result>
      */
-    sendTelemetry(payload: any, interfaceName: string, interfaceId: string): Promise<Result>
-    sendTelemetry(payload: any, interfaceName: string, interfaceId: string, callback: SendCallback): void
-    sendTelemetry(payload: any, interfaceName: string, interfaceId: string, properties: any): Promise<Result>
-    sendTelemetry(payload: any, interfaceName: string, interfaceId: string, properties: any, callback: SendCallback): void
-    sendTelemetry(payload: any, interfaceName: string, interfaceId: string, timestamp: string): Promise<Result>
-    sendTelemetry(payload: any, interfaceName: string, interfaceId: string, timestamp: string, callback: SendCallback): void
-    sendTelemetry(payload: any, interfaceName: string, interfaceId: string, properties: any, timestamp: string): Promise<Result>
-    sendTelemetry(payload: any, interfaceName: string, interfaceId: string, properties: any, timestamp: string, callback: SendCallback): void
+    sendTelemetry(payload: any, interfaceName: string): Promise<Result>
+    sendTelemetry(payload: any, interfaceName: string, callback: SendCallback): void
+    sendTelemetry(payload: any, interfaceName: string, properties: any): Promise<Result>
+    sendTelemetry(payload: any, interfaceName: string, properties: any, callback: SendCallback): void
+    sendTelemetry(payload: any, interfaceName: string, timestamp: string): Promise<Result>
+    sendTelemetry(payload: any, interfaceName: string, timestamp: string, callback: SendCallback): void
+    sendTelemetry(payload: any, interfaceName: string, properties: any, timestamp: string): Promise<Result>
+    sendTelemetry(payload: any, interfaceName: string, properties: any, timestamp: string, callback: SendCallback): void
     /**
     * 
     * @description Send state object for a particular interface
@@ -104,8 +103,8 @@ export interface IIoTCClient {
     * @param [callback] Function to execute when property gets set
     * @returns void or Promise<Result>
     */
-   sendProperty(payload: any, interfaceName: string, interfaceId: string): Promise<Result>
-   sendProperty(payload: any, interfaceName: string, interfaceId: string, callback: SendCallback): void
+    sendProperty(payload: any, interfaceName: string): Promise<Result>
+    sendProperty(payload: any, interfaceName: string, callback: SendCallback): void
     /**
      * 
      * @param eventName name of the event to listen
@@ -124,8 +123,7 @@ export interface IIoTCClient {
      */
     isConnected(): boolean,
 
-    addInterface(interfaceName: string, interfaceId: string): void,
-    addInterface(interfaceClass: BaseInterface): void
+    addInterface(inf: IoTCInterface): void
 
 }
 
@@ -140,12 +138,7 @@ export enum OperationStatus {
     SUCCESS = 200,
     FAILURE = 500
 }
-interface Acknowledgable {
-    acknowledge(status: OperationStatus): Promise<Result>,
-    acknowledge(status: OperationStatus, message: string): Promise<Result>,
-    acknowledge(status: OperationStatus, callback: SendCallback): void,
-    acknowledge(status: OperationStatus, message: string, callback: SendCallback): void
-}
+
 
 interface PnPItem {
     interfaceName: string,
@@ -154,10 +147,18 @@ interface PnPItem {
     name: string
 }
 
-export interface IIoTCProperty extends PnPItem, Acknowledgable {
+export interface IIoTCProperty extends PnPItem {
+    report(status: OperationStatus): Promise<Result>
+    report(status: OperationStatus, callback: SendCallback): void
+    report(status: OperationStatus, message: string): Promise<Result>
+    report(status: OperationStatus, message: string, callback: SendCallback): void
 }
 
-export interface IIoTCCommand extends PnPItem, Acknowledgable {
+export interface IIoTCCommand extends PnPItem {
+    acknowledge(status: OperationStatus): Promise<Result>,
+    acknowledge(status: OperationStatus, message: string): Promise<Result>,
+    acknowledge(status: OperationStatus, callback: SendCallback): void,
+    acknowledge(status: OperationStatus, message: string, callback: SendCallback): void
     update(status: OperationStatus): Promise<Result>,
     update(status: OperationStatus, message: string): Promise<Result>,
     update(status: OperationStatus, callback: SendCallback): void,
@@ -165,7 +166,15 @@ export interface IIoTCCommand extends PnPItem, Acknowledgable {
 }
 
 export type MessagesCallback = (message: Message) => void;
-export type PropertiesCallback = (settings: IIoTCProperty[]) => void;
+export type PropertiesCallback = (property: IIoTCProperty) => void;
 export type CommandsCallback = (command: IIoTCCommand) => void;
 
 export type Callback = MessagesCallback | PropertiesCallback | CommandsCallback;
+
+export type IoTCInterface = {
+    name: string,
+    id: string,
+    properties?: string[],
+    commands?: string[],
+    telemetry?: string[]
+}

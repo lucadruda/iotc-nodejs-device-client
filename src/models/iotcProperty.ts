@@ -1,18 +1,24 @@
 import { SendCallback, IIoTCProperty, OperationStatus, Result } from '../types/interfaces'
-import { Client as DeviceClient, Twin } from 'azure-iot-device'
+import { Client as DeviceClient } from 'azure-iot-device'
+import { Property } from 'azure-iot-digitaltwins-device';
 
 
 
 export default class IoTCProperty implements IIoTCProperty {
 
-    constructor(public name: string, public interfaceName: string, public interfaceId: string, public value: string, private twin?: Twin, public version?: number) {
+    constructor(private originalProp: Property, public name: string, public interfaceName: string, public interfaceId: string, public value: string, public version?: number) {
     }
 
-
-    acknowledge(status: OperationStatus, param1?: any, param2?: any): any {
-        if (!this.twin) {
-            throw new Error('Property cannot be aknolwedged since has not been received from the cloud');
+    send(callback?: any) {
+        if (callback) {
+            this.originalProp.report(this.value, callback);
         }
+        else {
+            return this.originalProp.report(this.value);
+        }
+    }
+
+    report(status: OperationStatus, param1?: any, param2?: any): any {
         let statusMessage = 'registered';
         let callback = null;
         if (param1) {
@@ -27,28 +33,16 @@ export default class IoTCProperty implements IIoTCProperty {
             callback = param2 as SendCallback;
         }
         let obj = {
-            [`$.iotin:${this.interfaceName}`]: {
-                [this.name]: {
-                    value: this.value,
-                    sv: this.version,
-                    sc: status,
-                    sd: statusMessage
-                }
-            }
+            code: status,
+            description: statusMessage,
+            version: this.version
         };
 
         if (callback && typeof callback === 'function') {
-            this.twin.properties.reported.update(obj, callback);
+            this.originalProp.report(this.value, obj, callback);
         }
         else {
-            return new Promise<Result>((resolve, reject) => {
-                this.twin.properties.reported.update(obj, (err) => {
-                    if (err) {
-                        reject(err);
-                    }
-                    else resolve({ code: OperationStatus.SUCCESS });
-                });
-            });
+            return this.originalProp.report(this.value, obj);
         }
     }
 

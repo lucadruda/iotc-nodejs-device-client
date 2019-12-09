@@ -49,7 +49,7 @@ export default class IoTCCommand implements IIoTCCommand {
         else {
             return new Promise<Result>(async (resolve, reject) => {
                 try {
-                    await this.resp.acknowledge(status, statusMessage);
+                    await this.resp.update(status, statusMessage);
                     resolve({ code: status });
                 }
                 catch (e) {

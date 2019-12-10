@@ -80,23 +80,7 @@ export interface IIoTCClient {
     sendTelemetry(payload: any, interfaceName: string, timestamp: string, callback: SendCallback): void
     sendTelemetry(payload: any, interfaceName: string, properties: any, timestamp: string): Promise<Result>
     sendTelemetry(payload: any, interfaceName: string, properties: any, timestamp: string, callback: SendCallback): void
-    /**
-    * 
-    * @description Send state object for a particular interface
-    * @param payload State to send: can be any type (usually json) or a collection of states
-    * @param timestamp Timestamp in ISO format to set custom timestamp instead of now()
-    * @param [callback] Function to execute when state information gets delivered
-    * @returns void or Promise<Result>
-    */
-    sendState(payload: any, timestamp?: string, callback?: SendCallback): Promise<Result> | void,
-    /**
-     * 
-     * @param payload Event to send: can be any type (usually json) or a collection of events
-     * @param timestamp Timestamp in ISO format to set custom timestamp instead of now()
-     * @param [callback] Function to execute when events gets triggered
-     * @returns void or Promise<Result>
-     */
-    sendEvent(payload: any, timestamp?: string, callback?: SendCallback): Promise<Result> | void,
+
     /**
     * @description Send a property to an interface
     * @param payload Property to send: can be any type (usually json) or a collection of properties

@@ -164,13 +164,6 @@ export class IoTCClient implements IIoTCClient {
             }));
         }
     }
-    sendState(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        this.logger.debug(`Sending state ${JSON.stringify(payload)}`);
-        return this.sendMessage(payload, null, timestamp, null, callback);
-    }
-    sendEvent(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        return this.sendMessage(payload, null, timestamp, null, callback);
-    }
 
 
     disconnect(callback?: (err: Error, result: Result) => void): any {
@@ -228,26 +221,6 @@ export class IoTCClient implements IIoTCClient {
         }
     }
 
-    // private subscribe() {
-    //     if (this.connected && this.twin) {
-    //         if (this.events[IOTC_EVENTS.PropertiesUpdated]) {
-    //             const propertiesUpdated = this.events[IOTC_EVENTS.PropertiesUpdated];
-    //             this.onPropertyUpdated(setting.param, setting.callback);
-    //         }
-    //         else if (this.events[IOTC_EVENTS.Command]) {
-    //             const command = this.events[IOTC_EVENTS.Command];
-    //             this.onCommand(command.param, command.callback);
-    //         }
-    //         else if (this.events[IOTC_EVENTS.MessageReceived]) {
-    //             const msg = this.events[IOTC_EVENTS.MessageReceived];
-    //             this.onMessageReceived(msg.param, msg.callback);
-    //         }
-    //         else if (this.events[IOTC_EVENTS.MessageSent]) {
-    //             const msg = this.events[IOTC_EVENTS.MessageSent];
-    //             this.onMessageSent(msg.param, msg.callback);
-    //         }
-    //     }
-    // }
 
     /**
      * Implement in derived class based on the security protocol.
@@ -343,15 +316,6 @@ export class IoTCClient implements IIoTCClient {
                 }
             });
         }
-    }
-
-    private onMessageSent(settingName: string, callback) {
-        if (settingName) {
-            settingName = `.${settingName}`;
-        }
-
-        return this.twin.on(`properties.desired${
-            settingName ? settingName : ''}`, callback);
     }
 
     public setLogging(logLevel: string | IOTC_LOGGING) {

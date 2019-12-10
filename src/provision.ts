@@ -16,8 +16,9 @@ import { SymmetricKeySecurityClient } from 'azure-iot-security-symmetric-key';
 export class DeviceProvisioning {
 
     private iotcModelId: string;
+    private iotcCapabilityModel: any;
     constructor(private endpoint: string = DPS_DEFAULT_ENDPOINT) {
-
+        this.iotcCapabilityModel = {};
     }
     /**
      * Provision and register a device using provided transport type
@@ -33,7 +34,7 @@ export class DeviceProvisioning {
             deviceClient.setProvisioningPayload({
                 '__iot:interfaces': {
                     CapabilityModelId: this.iotcModelId,
-                    CapabilityModel: {}
+                    CapabilityModel: this.iotcCapabilityModel
                 }
             });
         }
@@ -42,6 +43,10 @@ export class DeviceProvisioning {
 
     public setIoTCModelId(modelId: string) {
         this.iotcModelId = modelId;
+    }
+
+    public setCapabilityModel(model: string) {
+        this.iotcCapabilityModel = model;
     }
     public generateX509SecurityClient(deviceId: string, cert: X509): DeviceSecurityClient {
         return new X509Security(deviceId, cert);

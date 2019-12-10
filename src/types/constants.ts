@@ -66,7 +66,7 @@ export enum IOTC_EVENTS {
     MessageSent = 2,
     MessageReceived = 4,
     Command = 8,
-    SettingsUpdated = 10,
+    PropertiesUpdated = 10,
     Error = 20
 }
 

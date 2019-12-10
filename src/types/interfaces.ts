@@ -2,11 +2,9 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 import { X509ProvisioningTransport, TpmProvisioningTransport, X509SecurityClient, TpmSecurityClient } from "azure-iot-provisioning-device/lib/interfaces";
-import { X509, Message } from "azure-iot-common";
-import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, IOTC_LOGGING } from "./constants";
+import { Message } from "azure-iot-common";
+import { HTTP_PROXY_OPTIONS, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, IOTC_LOGGING } from "./constants";
 import { SymmetricKeySecurityClient } from "azure-iot-security-symmetric-key";
-import { DeviceMethodResponse } from "azure-iot-device";
-import Command from "../models/command";
 
 export class ConnectionError extends Error {
     constructor(message: string, public code: IOTC_CONNECTION_ERROR) {
@@ -44,6 +42,10 @@ export interface IIoTCClient {
      */
     setModelId(modelId: string): void,
     /**
+     * Set a JSON capability model
+     */
+    setCapabilityModel(model: any): void,
+    /**
      * Set global endpoint for DPS provisioning
      * @param endpoint hostname without protocol
      */
@@ -56,50 +58,56 @@ export interface IIoTCClient {
     /**
      * Disconnect device. Client cannot be reused after disconnect!!!
      */
-    disconnect(callback?: SendCallback): void,
+    disconnect(): Promise<Result>,
+    disconnect(callback: SendCallback): void,
     /**
      * Connect the device
      */
-    connect(callback?: SendCallback): void,
+    connect(): Promise<Result>,
+    connect(callback: SendCallback): void,
     /**
-     * 
+     * @description Send telemetry object for a particular interface
      * @param payload Message to send: can be any type (usually json) or a collection of messages
      * @param timestamp Timestamp in ISO format to set custom timestamp instead of now()
      * @param [callback] Function to execute when message gets delivered
      * @returns void or Promise<Result>
      */
-    sendTelemetry(payload: any, timestamp?: string, callback?: SendCallback): Promise<Result> | void,
+    sendTelemetry(payload: any, interfaceName: string): Promise<Result>
+    sendTelemetry(payload: any, interfaceName: string, callback: SendCallback): void
+    sendTelemetry(payload: any, interfaceName: string, properties: any): Promise<Result>
+    sendTelemetry(payload: any, interfaceName: string, properties: any, callback: SendCallback): void
+    sendTelemetry(payload: any, interfaceName: string, timestamp: string): Promise<Result>
+    sendTelemetry(payload: any, interfaceName: string, timestamp: string, callback: SendCallback): void
+    sendTelemetry(payload: any, interfaceName: string, properties: any, timestamp: string): Promise<Result>
+    sendTelemetry(payload: any, interfaceName: string, properties: any, timestamp: string, callback: SendCallback): void
+
     /**
-    * 
-    * @param payload State to send: can be any type (usually json) or a collection of states
-    * @param timestamp Timestamp in ISO format to set custom timestamp instead of now()
-    * @param [callback] Function to execute when state information gets delivered
-    * @returns void or Promise<Result>
-    */
-    sendState(payload: any, timestamp?: string, callback?: SendCallback): Promise<Result> | void,
-    /**
-     * 
-     * @param payload Event to send: can be any type (usually json) or a collection of events
-     * @param timestamp Timestamp in ISO format to set custom timestamp instead of now()
-     * @param [callback] Function to execute when events gets triggered
-     * @returns void or Promise<Result>
-     */
-    sendEvent(payload: any, timestamp?: string, callback?: SendCallback): Promise<Result> | void,
-    /**
-    * 
+    * @description Send a property to an interface
     * @param payload Property to send: can be any type (usually json) or a collection of properties
     * @param [callback] Function to execute when property gets set
     * @returns void or Promise<Result>
     */
-    sendProperty(payload: any, callback?: SendCallback): Promise<Result> | void,
+    sendProperty(payload: any, interfaceName: string): Promise<Result>
+    sendProperty(payload: any, interfaceName: string, callback: SendCallback): void
     /**
      * 
      * @param eventName name of the event to listen
      * @param callback function to execute when event triggers
      */
     on(eventName: string | IOTC_EVENTS, callback: Callback): void
+    /**
+     * 
+     * @param logLevel the log level (disable, api_only, all). Default disable
+     */
+    setLogging(logLevel: string | IOTC_LOGGING): void,
 
-    setLogging(logLevel: string | IOTC_LOGGING): void
+    /**
+     * @description Check if client is connected
+     * @returns check result
+     */
+    isConnected(): boolean,
+
+    addInterface(inf: IoTCInterface): void
 
 }
 
@@ -109,44 +117,48 @@ export interface IIoTCLogger {
     debug(message: string): void;
 }
 
-export enum CommandExecutionType {
-    SYNC,
-    ASYNC
-}
-interface Acknowledgable {
-    acknowledge(): void | Promise<Result>,
-    acknowledge(message: string): void | Promise<Result>,
-    acknowledge(callback: SendCallback): void | Promise<Result>,
-    acknowledge(message: string, callback: SendCallback): void | Promise<Result>
+
+export enum OperationStatus {
+    SUCCESS = 200,
+    FAILURE = 500
 }
 
-export interface ICommand extends Acknowledgable {
+
+interface PnPItem {
     interfaceName: string,
-    requestId: string,
-    name: string,
-    requestProperty?: Property,
-    type: CommandExecutionType,
-    update(): void | Promise<Result>,
-    update(message: string): void | Promise<Result>,
-    update(callback: SendCallback): void | Promise<Result>,
-    update(message: string, callback: SendCallback): void | Promise<Result>,
-}
-
-
-export type Property = {
-    interfaceName: string
-    name: string,
+    interfaceId?: string,
     value: any,
-    statusCode?: number,
-    statusMessage?: string,
-    version?: number
+    name: string
 }
 
-export interface ISetting extends Property, Acknowledgable {
+export interface IIoTCProperty extends PnPItem {
+    report(status: OperationStatus): Promise<Result>
+    report(status: OperationStatus, callback: SendCallback): void
+    report(status: OperationStatus, message: string): Promise<Result>
+    report(status: OperationStatus, message: string, callback: SendCallback): void
 }
 
-export type MessageCallback = (message: Message) => void;
-export type SettingsCallback = (settings: ISetting[]) => void;
-export type CommandCallback = (command: ICommand) => void;
+export interface IIoTCCommand extends PnPItem {
+    acknowledge(status: OperationStatus): Promise<Result>,
+    acknowledge(status: OperationStatus, message: string): Promise<Result>,
+    acknowledge(status: OperationStatus, callback: SendCallback): void,
+    acknowledge(status: OperationStatus, message: string, callback: SendCallback): void
+    update(status: OperationStatus): Promise<Result>,
+    update(status: OperationStatus, message: string): Promise<Result>,
+    update(status: OperationStatus, callback: SendCallback): void,
+    update(status: OperationStatus, message: string, callback: SendCallback): void,
+}
 
-export type Callback = MessageCallback | SettingsCallback | CommandCallback;
+export type MessagesCallback = (message: Message) => void;
+export type PropertiesCallback = (property: IIoTCProperty) => void;
+export type CommandsCallback = (command: IIoTCCommand) => void;
+
+export type Callback = MessagesCallback | PropertiesCallback | CommandsCallback;
+
+export type IoTCInterface = {
+    name: string,
+    id: string,
+    properties?: string[],
+    commands?: string[],
+    telemetry?: string[]
+}

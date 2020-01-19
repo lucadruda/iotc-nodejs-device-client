@@ -4,7 +4,7 @@ import { BaseInterface } from "azure-iot-digitaltwins-device"
 export type CapabilityType = 'InterfaceInstance' | 'Interface' | 'Property' | 'Command' | 'Telemetry'
 export type CapabilityId = {
     '@id': string,
-    '@type': CapabilityType,
+    '@type': CapabilityType | CapabilityType[],
     name?: string,
     displayName?: {
         [lang: string]: string

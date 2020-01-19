@@ -1,5 +1,5 @@
 import CommonInterface from "../models/commonInterface";
-import { CapabilityModel, InterfaceMap } from "../types/capabilities";
+import { CapabilityModel, InterfaceMap, Capability, CapabilityType } from "../types/capabilities";
 
 export function parse(capabilityModel: CapabilityModel, propertyCallback, commandCallback): InterfaceMap {
     let res = {};
@@ -12,13 +12,13 @@ export function parse(capabilityModel: CapabilityModel, propertyCallback, comman
                     if (interf.schema.contents && interf.schema.contents.length > 0) {
                         const items = interf.schema.contents;
                         items.forEach(item => {
-                            if (item["@type"] && item["@type"] === 'Property') {
+                            if (testForSchemaType(item, 'Property')) {
                                 cInf.addProperty(item.name,item.writable);
                             }
-                            else if (item["@type"] && item["@type"] === 'Command') {
+                            else if (testForSchemaType(item, 'Command')) {
                                 cInf.addCommand(item.name);
                             }
-                            else if (item["@type"] && item["@type"] === 'Telemetry') {
+                            else if (testForSchemaType(item, 'Telemetry')) {
                                 cInf.addTelemetry(item.name);
                             }
                         });
@@ -29,4 +29,10 @@ export function parse(capabilityModel: CapabilityModel, propertyCallback, comman
         });
     }
     return res;
+}
+
+function testForSchemaType(item: Capability, value: CapabilityType) {
+    const itemType = item["@type"];
+    return itemType &&
+           itemType instanceof Array ? itemType.includes(value) : itemType === value;
 }

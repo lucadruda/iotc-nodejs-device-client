@@ -51,7 +51,7 @@ export class IoTCClient implements IIoTCClient {
         this.onPropertyUpdated = this.onPropertyUpdated.bind(this);
     }
 
-    static create(id: string, scopeId: string, modelId: string, authenticationType: IOTC_CONNECT | string, options: X509 | string, logger?: IIoTCLogger): IIoTCClient {
+    static create(id: string, scopeId: string, modelId: string | null, authenticationType: IOTC_CONNECT | string, options: X509 | string, logger?: IIoTCLogger): IIoTCClient {
         return new IoTCClient(id, scopeId, modelId, authenticationType, options, logger);
     }
 

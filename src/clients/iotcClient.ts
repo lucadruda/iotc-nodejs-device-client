@@ -31,7 +31,7 @@ export class IoTCClient implements IIoTCClient {
     private digitalTwinClient: DigitalTwinClient;
     private twin: Twin;
     private logger: IIoTCLogger;
-    private constructor(readonly id: string, readonly scopeId: string, readonly capabilityModelId: string, readonly authenticationType: IOTC_CONNECT | string, readonly options: X509 | string, logger?: IIoTCLogger) {
+    private constructor(readonly id: string, readonly scopeId: string, readonly capabilityModelId: string | null, readonly authenticationType: IOTC_CONNECT | string, readonly options: X509 | string, logger?: IIoTCLogger) {
         if (typeof (authenticationType) == 'string') {
             this.authenticationType = IOTC_CONNECT[authenticationType.toUpperCase()];
         }

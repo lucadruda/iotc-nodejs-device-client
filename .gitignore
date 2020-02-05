@@ -3,3 +3,8 @@ node_modules/**
 **/sample*
 !samples
 .npmrc
+
+# vscode
+.vscode
+# mac
+.DS_Store

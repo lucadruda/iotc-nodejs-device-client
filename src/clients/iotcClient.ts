@@ -42,7 +42,9 @@ export class IoTCClient implements IIoTCClient {
             this.logger = new ConsoleLogger();
         }
         this.deviceProvisioning = new DeviceProvisioning(this.endpoint);
-        this.deviceProvisioning.setIoTCModelId(capabilityModelId);
+        if (capabilityModelId) {
+            this.deviceProvisioning.setIoTCModelId(capabilityModelId);
+        }
         this.interfaces = {};
         this.events = {};
         this.onCommandReceived = this.onCommandReceived.bind(this);

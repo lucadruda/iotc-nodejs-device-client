@@ -50,7 +50,7 @@ const iotc = IoTCClient.create(deviceId,scopeId,modelId,connectionType,cert);
 ```
 - *scopeId*: The application DPS scope Id
 - *deviceId*: The unique name for the device
-- *modelId*: Id of capability model to assign device to.
+- *modelId*: Id of capability model to assign device to. 'null' if not auto-provisioned.
 - *cert*: Certificate object
 - *connectionType*: Type of authentication. For certificate value is 'X509_CERT'.
 

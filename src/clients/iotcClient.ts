@@ -68,14 +68,14 @@ export class IoTCClient implements IIoTCClient {
     setProxy(options: HTTP_PROXY_OPTIONS): void {
         throw new Error("Method not implemented.");
     }
-    sendTelemetry(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        return this.sendMessage(payload, timestamp, callback);
+    sendTelemetry(payload: any, properties?: any, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
+        return this.sendMessage(payload, properties, callback);
     }
-    sendState(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        return this.sendMessage(payload, timestamp, callback);
+    sendState(payload: any, properties?: any, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
+        return this.sendMessage(payload, properties, callback);
     }
-    sendEvent(payload: any, timestamp?: string, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        return this.sendMessage(payload, timestamp, callback);
+    sendEvent(payload: any, properties?: any, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
+        return this.sendMessage(payload, properties, callback);
     }
     sendProperty(payload: any, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
         // payload = JSON.stringify(payload);
@@ -232,7 +232,7 @@ export class IoTCClient implements IIoTCClient {
         }
     }
 
-    sendMessage(payload: any, timestamp?: string, callback?: (err: ConnectionError, result: Result) => void): void | Promise<Result> {
+    sendMessage(payload: any, properties: any, callback?: (err: ConnectionError, result: Result) => void): void | Promise<Result> {
         const clientCallback = (clientErr, clientRes) => {
             if (clientErr) {
                 callback(new ConnectionError(clientErr.message, IOTC_CONNECTION_ERROR.COMMUNICATION_ERROR), null);
@@ -246,9 +246,19 @@ export class IoTCClient implements IIoTCClient {
                 this.deviceClient.sendEventBatch(payload.map(p => new Message(JSON.stringify(p))), clientCallback);
             }
             else {
-                var message = new Message(JSON.stringify(payload));
-                if (timestamp) {
-                    message.properties.add('iothub-creation-time-utc', timestamp);
+                let message = new Message(JSON.stringify(payload));
+                if (properties) {
+                    Object.keys(properties).forEach(prop => {
+                        if (prop.toLowerCase() === 'contenttype') {
+                            message.contentType = properties[prop];
+                        }
+                        else if (prop.toLowerCase() === 'contentencoding') {
+                            message.contentEncoding = properties[prop];
+                        }
+                        else {
+                            message.properties.add(prop, properties[prop]);
+                        }
+                    });
                 }
                 this.deviceClient.sendEvent(message, clientCallback);
             }
@@ -261,9 +271,19 @@ export class IoTCClient implements IIoTCClient {
                         resolve(new Result(IOTC_CONNECTION_OK));
                     }
                     else {
-                        var message = new Message(JSON.stringify(payload));
-                        if (timestamp) {
-                            message.properties.add('iothub-creation-time-utc', timestamp);
+                        let message = new Message(JSON.stringify(payload));
+                        if (properties) {
+                            Object.keys(properties).forEach(prop => {
+                                if (prop.toLowerCase() === 'contenttype') {
+                                    message.contentType = properties[prop];
+                                }
+                                else if (prop.toLowerCase() === 'contentencoding') {
+                                    message.contentEncoding = properties[prop];
+                                }
+                                else {
+                                    message.properties.add(prop, properties[prop]);
+                                }
+                            });
                         }
                         const messageEnqued = await this.deviceClient.sendEvent(message);
                         resolve(new Result(IOTC_CONNECTION_OK));

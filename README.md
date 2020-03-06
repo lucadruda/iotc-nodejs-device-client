@@ -78,11 +78,11 @@ Properties can be custom or part of the reserved ones (see list [here](https://g
 
 ### Send state update
 ```
-iotc.sendState({fieldName:'fieldValue'}, timestamp, sendCallback);
+iotc.sendState({fieldName:'fieldValue'}, properties, sendCallback);
 ```
 ### Send event
 ```
-iotc.sendEvent(event, timestamp, sendCallback);
+iotc.sendEvent(event, properties, sendCallback);
 ```
 ### Send property update
 ```

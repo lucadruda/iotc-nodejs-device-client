@@ -71,9 +71,10 @@ setInterval(() => {
                 field1: value1,
                 field2: value2,
                 field3: value3
-            }, timestamp, sendCallback)
+            }, properties, sendCallback)
 ```
-An optional timestamp field can be included in the send methods, to specify the UTC date and time of the message. This field must be in ISO format (e.g., YYYY-MM-DDTHH:mm:ss.sssZ). If timestamp is not provided, the current date and time will be used.
+An optional *properties* object can be included in the send methods, to specify additional properties for the message (e.g. timestamp, content-type etc... ).
+Properties can be custom or part of the reserved ones (see list [here](https://github.com/Azure/azure-iot-sdk-csharp/blob/master/iothub/device/src/MessageSystemPropertyNames.cs#L36)).
 
 ### Send state update
 ```

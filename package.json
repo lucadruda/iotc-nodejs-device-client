@@ -17,24 +17,24 @@
     "assets"
   ],
   "dependencies": {
-    "azure-iot-common": "^1.8.2",
-    "azure-iot-device": "^1.11.0",
-    "azure-iot-device-amqp": "^1.8.1",
-    "azure-iot-device-http": "^1.8.1",
-    "azure-iot-device-mqtt": "^1.8.1",
-    "azure-iot-provisioning-device-amqp": "^1.6.1",
-    "azure-iot-provisioning-device-http": "^1.6.1",
-    "azure-iot-provisioning-device-mqtt": "^1.5.10",
-    "azure-iot-security-symmetric-key": "^1.5.10",
-    "azure-iot-security-x509": "^1.3.2",
-    "azure-iothub": "^1.8.1",
+    "azure-iot-common": "^1.12.0",
+    "azure-iot-device": "^1.13.0",
+    "azure-iot-device-amqp": "^1.12.0",
+    "azure-iot-device-http": "^1.12.0",
+    "azure-iot-device-mqtt": "^1.12.0",
+    "azure-iot-provisioning-device-amqp": "^1.8.0",
+    "azure-iot-provisioning-device-http": "^1.8.0",
+    "azure-iot-provisioning-device-mqtt": "^1.7.0",
+    "azure-iot-security-symmetric-key": "^1.7.0",
+    "azure-iot-security-x509": "^1.7.0",
+    "azure-iothub": "^1.12.0",
     "fs-extra": "^7.0.1",
     "mqtt": "^3.0.0",
     "openssl-wrapper": "^0.3.4",
-    "rhea": "^0.3.5",
-    "uuid": "^3.3.2"
+    "rhea": "^0.3.11",
+    "uuid": "^3.4.0"
   },
   "devDependencies": {
-    "@types/node": "^10.17.4"
+    "@types/node": "^10.17.18"
   }
 }

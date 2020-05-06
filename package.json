@@ -8,7 +8,7 @@
   "homepage": "https://github.com/lucadruda/iotc_nodejs_device_client",
   "scripts": {
     "clean": "rimraf ./dist",
-    "build": "npm run clean && tsc",
+    "build": "npm run clean && node_modules/.bin/tsc",
     "prepare": "npm run build"
   },
   "files": [
@@ -35,6 +35,8 @@
     "uuid": "^3.4.0"
   },
   "devDependencies": {
-    "@types/node": "^10.17.18"
+    "@types/node": "^10.17.18",
+    "rimraf": "^3.0.2",
+    "typescript": "^3.8.3"
   }
 }

@@ -53,7 +53,7 @@ export class DeviceProvisioning {
         let transportStr = DeviceTransport[transportType].split("_")[0];
         let mod = capitalizeFirst(transportStr);
         if (DeviceTransport[transportType].split("_")[1]) {
-            mod = capitalizeFirst(DeviceTransport[transportType].split("_")[1]);
+            mod = `${mod}${capitalizeFirst(DeviceTransport[transportType].split("_")[1])}`;
         }
         const transport = (await import(`azure-iot-provisioning-device-${transportStr.toLowerCase()}`))[mod];
         return new transport();
@@ -63,7 +63,7 @@ export class DeviceProvisioning {
         let transportStr = DeviceTransport[transportType].split("_")[0];
         let mod = capitalizeFirst(transportStr);
         if (DeviceTransport[transportType].split("_")[1]) {
-            mod = capitalizeFirst(DeviceTransport[transportType].split("_")[1]);
+            mod = `${mod}${capitalizeFirst(DeviceTransport[transportType].split("_")[1])}`;
         }
         let transportCtr = (await import(`azure-iot-device-${transportStr.toLowerCase()}`))[mod];
         return transportCtr;

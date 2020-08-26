@@ -214,7 +214,6 @@ export class IoTCClient implements IIoTCClient {
             this.twin.on('properties.desired', this.onPropertiesUpdated.bind(this));
             this.listenToCommands()
             this.deviceClient.on('message', (msg) => {
-                console.log(msg);
                 if (msg.properties && msg.properties.propertyList) {
                     const c2d = msg.properties.propertyList.find(p => p.key === 'method-name');
                     if (c2d) {

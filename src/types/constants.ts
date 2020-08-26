@@ -1,6 +1,8 @@
 // Copyright (c) Luca Druda. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+import { Connected, Disconnected } from "azure-iot-common/dist/results";
+
 export const DPS_ENDPOINT = 'global.azure-devices-provisioning.net';
 export const DEFAULT_EXPIRATION_SECONDS = 21600; // 6 hours
 
@@ -62,13 +64,16 @@ export type HTTP_PROXY_OPTIONS = {
 }
 
 export enum IOTC_EVENTS {
-    ConnectionStatus = 1,
-    MessageSent = 2,
-    MessageReceived = 4,
-    Command = 8,
-    SettingsUpdated = 10,
-    Error = 20
+    Properties,
+    Commands,
+    EnqueuedCommands,
+    ConnectionStatus
 }
+export enum IOTC_CONNECTION_STATUS {
+    Connected,
+    Disconnected
+}
+
 
 export const DPS_DEFAULT_ENDPOINT = 'global.azure-devices-provisioning.net';
 export enum DeviceTransport {

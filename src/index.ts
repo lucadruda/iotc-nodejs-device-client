@@ -8,3 +8,4 @@ import { CertificateGenerator } from './utils/certificates';
 export { IIoTCClient };
 export { IoTCClient };
 export { CertificateGenerator };
+export * from './types/constants';

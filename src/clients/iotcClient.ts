@@ -1,15 +1,16 @@
 // Copyright (c) Luca Druda. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-import { IIoTCClient, ConnectionError, Result, IIoTCLogger } from "../types/interfaces";
-import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_OK, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, DPS_DEFAULT_ENDPOINT, IOTC_LOGGING, IOTC_PROTOCOL } from "../types/constants";
-import { X509, Message, callbackToPromise } from "azure-iot-common";
+import { IIoTCClient, IIoTCLogger, CommandCallback, PropertyCallback, ConnectionStatusCallback, IIoTCCommand, IIoTCCommandResponse, FileUploadResult } from "../types/interfaces";
+import { IOTC_CONNECT, IOTC_EVENTS, DeviceTransport, DPS_DEFAULT_ENDPOINT, IOTC_LOGGING, IOTC_CONNECTION_STATUS } from "../types/constants";
+import { X509, Message } from "azure-iot-common";
 import * as util from 'util';
 import { Client as DeviceClient, Twin, DeviceMethodResponse } from 'azure-iot-device';
 import { ConsoleLogger } from "../consoleLogger";
 import { log, error } from "util";
 import { DeviceProvisioning } from "../provision";
 import * as rhea from 'rhea';
+import { promiseTimeout } from "../utils/common";
 
 export class IoTCClient implements IIoTCClient {
     isConnected(): boolean {
@@ -19,8 +20,8 @@ export class IoTCClient implements IIoTCClient {
 
     private events: {
         [s in IOTC_EVENTS]?: {
-            callback: (message: string | any) => void,
-            param: any
+            callback: PropertyCallback | CommandCallback | ConnectionStatusCallback,
+            filter?: string
         }
     }
     private protocol: DeviceTransport = DeviceTransport.MQTT;
@@ -45,6 +46,12 @@ export class IoTCClient implements IIoTCClient {
         this.deviceProvisioning = new DeviceProvisioning(this.endpoint);
         this.events = {};
     }
+    async fetchTwin(): Promise<void> {
+        this.twin = await util.promisify(this.deviceClient.getTwin).bind(this.deviceClient)();
+    }
+    uploadFile(fileName: string, contentType: string, fileData: any, encoding?: string): Promise<FileUploadResult> {
+        throw new Error("Method not implemented.");
+    }
     getConnectionString(): string {
         return this.connectionstring;
     }
@@ -65,84 +72,43 @@ export class IoTCClient implements IIoTCClient {
     setModelId(modelId: string): void {
         this.deviceProvisioning.setIoTCModelId(modelId);
     }
-    setProxy(options: HTTP_PROXY_OPTIONS): void {
-        throw new Error("Method not implemented.");
-    }
-    sendTelemetry(payload: any, properties?: any, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        return this.sendMessage(payload, properties, callback);
-    }
-    sendState(payload: any, properties?: any, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        return this.sendMessage(payload, properties, callback);
-    }
-    sendEvent(payload: any, properties?: any, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        return this.sendMessage(payload, properties, callback);
-    }
-    sendProperty(payload: any, callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        // payload = JSON.stringify(payload);
-        this.logger.log(`Sending property ${payload}`);
-        if (callback) {
-            this.twin.properties.reported.update(payload, callback);
-        }
-        else {
-            return new Promise<Result>((resolve, reject) => {
-                this.twin.properties.reported.update(payload, (err) => {
-                    if (err) {
-                        reject(err);
-                    }
-                    else {
-                        resolve(new Result(IOTC_CONNECTION_OK));
-                    }
-                });
-            });
-        }
+
+
+    async disconnect(): Promise<void> {
+        this.logger.debug(`Disconnecting client...`);
+        const disconnectResult = await this.deviceClient.close();
+        return;
     }
 
-    disconnect(callback?: (err: Error, result: Result) => void): void | Promise<Result> {
-        this.logger.log(`Disconnecting client...`);
-        if (callback) {
-            this.deviceClient.close((clientErr, clientRes) => {
-                if (clientErr) {
-                    callback(new Error(clientErr.message), new Result(IOTC_CONNECTION_ERROR.COMMUNICATION_ERROR));
-                }
-                else {
-                    callback(null, new Result(IOTC_CONNECTION_OK));
-                }
-            });
-        }
-        else {
-            return new Promise<Result>(async (resolve, reject) => {
-                try {
-                    const disconnectResult = await this.deviceClient.close();
-                    resolve(new Result(IOTC_CONNECTION_OK));
-                }
-                catch (err) {
-                    reject(new ConnectionError(err.message, IOTC_CONNECTION_ERROR.COMMUNICATION_ERROR));
-                }
-            });
-        }
-    }
-
-    async connect(): Promise<any> {
+    async connect(opts?: { cleanSession?: boolean, timeout?: number }): Promise<any> {
+        const config = { ...{ cleanSession: false, timeout: 30 }, ...opts };
         const connStatusEvent = this.events[IOTC_EVENTS.ConnectionStatus];
         this.logger.log(`Connecting client...`);
-        this.connectionstring = await this.register();
+        this.connectionstring = await promiseTimeout(this.register.bind(this.deviceProvisioning, this.modelId), config.timeout * 1000);
         this.deviceClient = DeviceClient.fromConnectionString(this.connectionstring, await this.deviceProvisioning.getConnectionTransport(this.protocol));
+        this.deviceClient.setTransportOptions({
+            clean: config.cleanSession
+        });
         this.deviceClient.on('disconnect', () => {
-            if (connStatusEvent) {
-                connStatusEvent.callback('disconnected');
+            if (connStatusEvent && connStatusEvent.callback) {
+                (connStatusEvent.callback as ConnectionStatusCallback)(IOTC_CONNECTION_STATUS.DISCONNECTED);
             }
             this.connected = false;
 
-        })
+        });
+        this.deviceClient.on('connect', () => {
+            if (connStatusEvent && connStatusEvent.callback) {
+                (connStatusEvent.callback as ConnectionStatusCallback)(IOTC_CONNECTION_STATUS.CONNECTED);
+            }
+            this.connected = true;
+
+        });
         try {
-            await util.promisify(this.deviceClient.open).bind(this.deviceClient)();
+            await promiseTimeout(util.promisify(this.deviceClient.open).bind(this.deviceClient), config.timeout * 1000);
             this.connected = true;
             if (!(this.protocol == DeviceTransport.HTTP)) {
-                this.twin = await util.promisify(this.deviceClient.getTwin).bind(this.deviceClient)();
+                this.twin = await promiseTimeout(util.promisify(this.deviceClient.getTwin).bind(this.deviceClient), config.timeout * 1000);
                 this.subscribe();
-            }
-            if (connStatusEvent) {
-                connStatusEvent.callback('connected');
             }
         }
         catch (err) {
@@ -163,19 +129,15 @@ export class IoTCClient implements IIoTCClient {
             const registration = await this.deviceProvisioning.register(this.scopeId, this.protocol, x509Security);
             connectionString = `HostName=${registration.assignedHub};DeviceId=${registration.deviceId};x509=true`;
         }
-        else if (this.authenticationType == IOTC_CONNECT.CONN_STRING) {
-            // Just pass the provided connection string.
-            connectionString = this.options as string;
-        }
         else {
-            let sasKey;
+            let sasKey: string;
             if (this.authenticationType == IOTC_CONNECT.SYMM_KEY) {
                 sasKey = this.deviceProvisioning.computeDerivedKey(this.options as string, this.id);
             }
             else {
                 sasKey = this.options as string;
             }
-            const sasSecurity = await this.deviceProvisioning.generateSymKeySecurityClient(this.id, sasKey);
+            const sasSecurity = this.deviceProvisioning.generateSymKeySecurityClient(this.id, sasKey);
             const registration = await this.deviceProvisioning.register(this.scopeId, this.protocol, sasSecurity);
             connectionString = `HostName=${registration.assignedHub};DeviceId=${registration.deviceId};SharedAccessKey=${sasKey}`;
         }
@@ -184,138 +146,220 @@ export class IoTCClient implements IIoTCClient {
     }
 
 
-    on(eventName: string | IOTC_EVENTS, callback: (message: string | any) => void): void {
+    on(eventName: string | IOTC_EVENTS, callback: PropertyCallback | CommandCallback | ConnectionStatusCallback): void {
         if (typeof (eventName) == 'number') {
             eventName = IOTC_EVENTS[eventName];
         }
-        const settings = eventName.match(/^SettingsUpdated$|SettingsUpdated\.([\S]+)/); // matches "SettingsUpdated" or "SettingsUpdated.settingname"
-        const messageReceived = eventName.match(/^MessageReceived$|MessageReceived\.([\S]+)/);
-        const messageSent = eventName.match(/^MessageSent$|MessageSent\.([\S]+)/);
-        const command = eventName.match(/^Command$|Command\.([\S]+)/);
-        if (settings) {
-            this.events[IOTC_EVENTS.SettingsUpdated] = {
-                callback,
-                param: settings[1] ? settings[1] : undefined
-            }
-            if (this.connected && this.twin) {
-                this.onSettingsUpdated(settings[1], callback);
+        const properties = eventName.match(/^Properties$|Properties\.([\S]+)/); // matches "Properties" or "Properties.propertyname"
+        const commands = eventName.match(/^Commands$|Commands\.([\S]+)/);
+        const connection = eventName.match(/^ConnectionStatus$/);
+        if (properties) {
+            this.events[IOTC_EVENTS.Properties] = {
+                callback: callback as PropertyCallback,
+                filter: properties[1] ? properties[1] : undefined
             }
         }
-        else if (messageReceived) {
-            this.events[IOTC_EVENTS.MessageReceived] = {
+        else if (commands) {
+            this.events[IOTC_EVENTS.Commands] = {
                 callback,
-                param: messageReceived[1] ? messageReceived[1] : undefined
+                filter: commands[1] ? commands[1] : undefined
             }
-            if (this.connected && this.twin) {
-                this.onMessageReceived(messageReceived[1], callback);
-            }
-
         }
-        else if (messageSent) {
-            this.events[IOTC_EVENTS.MessageSent] = {
-                callback,
-                param: messageSent[1] ? messageSent[1] : undefined
-            }
-            if (this.connected && this.twin) {
-                this.onMessageSent(messageSent[1], callback);
-            }
-
-        }
-        else if (command) {
-            this.events[IOTC_EVENTS.Command] = {
-                callback,
-                param: command[1] ? command[1] : undefined
-            }
-            if (this.connected && this.twin) {
-                this.onCommand(command[1], callback);
+        else if (connection) {
+            this.events[IOTC_EVENTS.ConnectionStatus] = {
+                callback
             }
         }
     }
 
-    sendMessage(payload: any, properties: any, callback?: (err: ConnectionError, result: Result) => void): void | Promise<Result> {
-        const clientCallback = (clientErr, clientRes) => {
-            if (clientErr) {
-                callback(new ConnectionError(clientErr.message, IOTC_CONNECTION_ERROR.COMMUNICATION_ERROR), null);
-            }
-            else {
-                callback(null, new Result(IOTC_CONNECTION_OK));
-            }
+    async sendTelemetry(payload: any, properties?: any): Promise<void> {
+        if (payload instanceof Array) {
+            await this.deviceClient.sendEventBatch(payload.map(p => new Message(JSON.stringify(p))));
+            return;
         }
-        if (callback) {
-            if (payload instanceof Array) {
-                this.deviceClient.sendEventBatch(payload.map(p => new Message(JSON.stringify(p))), clientCallback);
-            }
-            else {
-                let message = new Message(JSON.stringify(payload));
-                if (properties) {
-                    Object.keys(properties).forEach(prop => {
-                        if (prop.toLowerCase() === 'contenttype') {
-                            message.contentType = properties[prop];
-                        }
-                        else if (prop.toLowerCase() === 'contentencoding') {
-                            message.contentEncoding = properties[prop];
-                        }
-                        else {
-                            message.properties.add(prop, properties[prop]);
-                        }
-                    });
+
+        let message = new Message(JSON.stringify(payload));
+        if (properties) {
+            Object.keys(properties).forEach(prop => {
+                if (prop.toLowerCase() === 'contenttype') {
+                    message.contentType = properties[prop];
                 }
-                this.deviceClient.sendEvent(message, clientCallback);
-            }
+                else if (prop.toLowerCase() === 'contentencoding') {
+                    message.contentEncoding = properties[prop];
+                }
+                else {
+                    message.properties.add(prop, properties[prop]);
+                }
+            });
         }
-        else {
-            return new Promise<Result>(async (resolve, reject) => {
-                try {
-                    if (payload instanceof Array) {
-                        const messageEnqued = await this.deviceClient.sendEventBatch(payload.map(p => new Message(JSON.stringify(p))));
-                        resolve(new Result(IOTC_CONNECTION_OK));
-                    }
-                    else {
-                        let message = new Message(JSON.stringify(payload));
-                        if (properties) {
-                            Object.keys(properties).forEach(prop => {
-                                if (prop.toLowerCase() === 'contenttype') {
-                                    message.contentType = properties[prop];
-                                }
-                                else if (prop.toLowerCase() === 'contentencoding') {
-                                    message.contentEncoding = properties[prop];
-                                }
-                                else {
-                                    message.properties.add(prop, properties[prop]);
-                                }
-                            });
-                        }
-                        const messageEnqued = await this.deviceClient.sendEvent(message);
-                        resolve(new Result(IOTC_CONNECTION_OK));
-                    }
+        await this.deviceClient.sendEvent(message);
+    }
+
+    async sendProperty(property: any): Promise<void> {
+        // payload = JSON.stringify(payload);
+        return new Promise((resolve, reject) => {
+            this.logger.debug(`Sending property ${property}`);
+            this.twin.properties.reported.update(property, (err: Error) => {
+                if (err) {
+                    reject(err);
                 }
-                catch (err) {
-                    reject(new ConnectionError(err.message, IOTC_CONNECTION_ERROR.COMMUNICATION_ERROR));
+                else {
+                    resolve();
+                }
+            });
+        });
+    }
+
+
+    private subscribe() {
+        if (this.connected && this.twin) {
+            this.twin.on('properties.desired', this.onPropertiesUpdated.bind(this));
+            this.listenToCommands()
+            this.deviceClient.on('message', (msg) => {
+                if (msg.properties && msg.properties.propertyList) {
+                    const c2d = msg.properties.propertyList.find(p => p.key === 'method-name');
+                    if (c2d) {
+                        let cmd: IIoTCCommand = {
+                            name: c2d.value.split(':')[1],
+                            requestPayload: msg.data ? msg.getData() : undefined,
+                            reply: async function (this: IoTCClient) {
+                                await this.deviceClient.complete(msg);
+                            }.bind(this),
+                            requestId: null
+                        }
+                        const listener = this.events[IOTC_EVENTS.Commands];
+                        if (!listener) {
+                            return;
+                        }
+                        if ((listener.filter && listener.filter != cmd.name)) {
+                            return;
+                        }
+                        // confirm reception first
+                        (listener.callback as CommandCallback)(cmd);
+
+                    }
                 }
             });
         }
     }
 
-    private subscribe() {
-        if (this.connected && this.twin) {
-            if (this.events[IOTC_EVENTS.SettingsUpdated]) {
-                const setting = this.events[IOTC_EVENTS.SettingsUpdated];
-                this.onSettingsUpdated(setting.param, setting.callback);
+    private onPropertiesUpdated(properties: {
+        [x: string]: any,
+        '$version': number
+    }) {
+        const listener = this.events[IOTC_EVENTS.Properties];
+        if (!listener) {
+            return;
+        }
+        Object.keys(properties).forEach(prop => {
+            if ((listener.filter && listener.filter != prop) || prop === '$version') {
+                return;
             }
-            else if (this.events[IOTC_EVENTS.Command]) {
-                const command = this.events[IOTC_EVENTS.Command];
-                this.onCommand(command.param, command.callback);
+            const propVersion = properties['$version'];
+            let value = properties[prop];
+            let wrapped = false;
+            const valueType = typeof properties[prop];
+            if (valueType !== 'string' && valueType !== 'number' && properties[prop].value) {
+                value = properties[prop].value;
+                wrapped = true;
             }
-            else if (this.events[IOTC_EVENTS.MessageReceived]) {
-                const msg = this.events[IOTC_EVENTS.MessageReceived];
-                this.onMessageReceived(msg.param, msg.callback);
-            }
-            else if (this.events[IOTC_EVENTS.MessageSent]) {
-                const msg = this.events[IOTC_EVENTS.MessageSent];
-                this.onMessageSent(msg.param, msg.callback);
-            }
+            (listener.callback as PropertyCallback)({
+                name: prop,
+                value,
+                version: propVersion,
+                ack: async function (this: IoTCClient, message?: string) {
+                    if (wrapped) {
+                        await this.sendProperty({
+                            [prop]: {
+                                ac: 200,
+                                ad: message ? message : `Property applied`,
+                                av: propVersion,
+                                value
+                            }
+                        });
+                    }
+                    else {
+                        await this.sendProperty({
+                            [prop]: value
+                        });
+                    }
+                }.bind(this)
+            });
+        });
+    }
+
+    private async ackCommand(requestId: string, message: string, status?: IIoTCCommandResponse) {
+        if (!this.connected) {
+            return;
+        }
+        let resp = new DeviceMethodResponse(requestId, this.deviceClient._transport);
+        let responseStatus = 200;
+        if (status && status == IIoTCCommandResponse.ERROR) {
+            responseStatus = 500;
+        }
+        await resp.send(responseStatus, message);
+    }
+
+    private onCommandReceived(command: Partial<IIoTCCommand>) {
+        const listener = this.events[IOTC_EVENTS.Commands];
+        if (!listener) {
+            return;
+        }
+        if ((listener.filter && listener.filter != command.name)) {
+            return;
+        }
+        // confirm reception first
+        (listener.callback as CommandCallback)({
+            name: command.name as string,
+            requestPayload: command.requestPayload as any,
+            requestId: command.requestId as string,
+            reply: async function (this: IoTCClient, status: IIoTCCommandResponse, message: string) {
+                await this.ackCommand(command.requestId as string, message, status);
+                await this.sendProperty({
+                    [command.name as string]: {
+                        value: message
+                    }
+                });
+            }.bind(this)
+        });
+    }
+
+    private listenToCommands() {
+        if (this.protocol == DeviceTransport.MQTT) {
+            this.deviceClient._transport.enableMethods((err) => {
+                if (err) {
+                    throw new Error('Commands can\'t be received');
+                }
+                else {
+                    const commandFormat = /\$iothub\/methods\/POST\/([\S]+)\/\?\$rid=([\d])+/;
+                    (<any>this.deviceClient._transport)._mqtt.on('message', (topic, payload) => {
+                        const commandMatch = topic.match(commandFormat);
+                        if (commandMatch) {
+                            this.onCommandReceived({
+                                name: commandMatch[1], requestId: commandMatch[2], requestPayload: payload
+                            });
+                        }
+                    });
+                }
+            });
+
+        }
+        else if (this.protocol == DeviceTransport.AMQP) {
+            this.deviceClient._transport.enableMethods((err) => {
+                (<any>this.deviceClient._transport)._deviceMethodClient._receiverLink.on('message', (msg) => {
+                    this.onCommandReceived({
+                        name: msg.application_properties['IoThub-methodname'],
+                        requestPayload: JSON.parse(msg.body.content.toString()),
+                        requestId: rhea.uuid_to_string(msg.correlation_id)
+                    });
+                });
+            });
+        }
+        else {
+            throw new Error('Commands are not supported over http');
         }
     }
+
 
     private onSettingsUpdated(settingName: string, callback) {
         if (settingName) {
@@ -344,8 +388,7 @@ export class IoTCClient implements IIoTCClient {
             settingName = `.${settingName}`;
         }
 
-        return this.twin.on(`properties.desired${
-            settingName ? settingName : ''}`, callback);
+        return this.twin.on(`properties.desired${settingName ? settingName : ''}`, callback);
     }
 
     private onMessageReceived(msgname: string, callback) {

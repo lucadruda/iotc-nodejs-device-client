@@ -3,7 +3,7 @@
 
 import { exec as openssl } from 'openssl-wrapper';
 import * as path from 'path';
-import * as fs from 'fs-extra';
+import { promises as fs } from 'fs';
 
 const DEFAULT_ROOT_FOLDER = path.join('./certificates');
 const DEFAULT_PASSWORD = 'abcd456';
@@ -169,14 +169,14 @@ export class CertificateGenerator {
 
     public async init() {
         console.log(`Certificates will be saved under ${this.config.rootFolder}`);
-        await fs.remove(this.config.rootFolder);
-        await fs.mkdirp(path.join(this.config.root_ca.public, '..'));
-        await fs.mkdirp(path.join(this.config.root_ca.privateKey, '..'));
-        await fs.mkdirp(path.join(this.config.intermediate_ca.public, '..'));
-        await fs.mkdirp(path.join(this.config.intermediate_ca.privateKey, '..'));
-        await fs.mkdirp(path.join(this.config.intermediate_ca.csr, '..'));
-        await fs.mkdirp(path.join(this.config.rootFolder, 'newcerts'));
-        await fs.createFile(path.join(this.config.rootFolder, 'index.txt'));
+        await fs.rmdir(this.config.rootFolder);
+        await fs.mkdir(path.join(this.config.root_ca.public, '..'), { recursive: true });
+        await fs.mkdir(path.join(this.config.root_ca.privateKey, '..'), { recursive: true });
+        await fs.mkdir(path.join(this.config.intermediate_ca.public, '..'), { recursive: true });
+        await fs.mkdir(path.join(this.config.intermediate_ca.privateKey, '..'), { recursive: true });
+        await fs.mkdir(path.join(this.config.intermediate_ca.csr, '..'), { recursive: true });
+        await fs.mkdir(path.join(this.config.rootFolder, 'newcerts'));
+        await fs.writeFile(path.join(this.config.rootFolder, 'index.txt'), '');
         await fs.writeFile(path.join(this.config.rootFolder, 'serial'), '01');
         // set env for openssl
         process.env['ROOT_FOLDER'] = this.config.rootFolder

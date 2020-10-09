@@ -1,0 +1,16 @@
+{
+  "name": "iotc-device-samples",
+  "version": "1.0.1-beta.0",
+  "description": "Simple samples demonstrating how to use Azure IoTCentral device SDK for Node.JS",
+  "scripts": {
+    "build": "tsc -p ts"
+  },
+  "author": "Luca Druda",
+  "license": "MIT",
+  "dependencies": {
+    "azure-iotcentral-device-client": "^2.0.0-beta.1"
+  },
+  "devDependencies": {
+    "typescript": "^4.0.3"
+  }
+}

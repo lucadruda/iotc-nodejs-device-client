@@ -9,7 +9,9 @@
   "scripts": {
     "clean": "rimraf ./dist",
     "build": "npm run clean && tsc",
-    "prepare": "npm run build"
+    "build-samples":"tsc -p samples/ts",
+    "prepare": "npm run build",
+    "generate-certificates": "node ./dist/utils/certificates.js"
   },
   "files": [
     "dist",
@@ -29,12 +31,13 @@
     "azure-iot-security-x509": "^1.7.6",
     "azure-iothub": "^1.13.0",
     "mqtt": "^3.0.0",
-    "openssl-wrapper": "^0.3.4",
+    "node-forge": "^0.10.0",
     "rhea": "^0.3.11",
     "uuid": "^3.4.0"
   },
   "devDependencies": {
-    "@types/node": "^10.17.18",
+    "@types/node": "^10.17.37",
+    "@types/node-forge": "^0.9.5",
     "rimraf": "^3.0.2"
   }
 }

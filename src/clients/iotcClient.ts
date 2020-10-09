@@ -7,7 +7,6 @@ import { X509, Message } from "azure-iot-common";
 import * as util from 'util';
 import { Client as DeviceClient, Twin, DeviceMethodResponse } from 'azure-iot-device';
 import { ConsoleLogger } from "../consoleLogger";
-import { log, error } from "util";
 import { DeviceProvisioning } from "../provision";
 import * as rhea from 'rhea';
 import { promiseTimeout } from "../utils/common";
@@ -84,8 +83,11 @@ export class IoTCClient implements IIoTCClient {
         const config = { ...{ cleanSession: false, timeout: 30 }, ...opts };
         const connStatusEvent = this.events[IOTC_EVENTS.ConnectionStatus];
         this.logger.log(`Connecting client...`);
-        this.connectionstring = await promiseTimeout(this.register.bind(this.deviceProvisioning, this.modelId), config.timeout * 1000);
+        this.connectionstring = await promiseTimeout(this.register.bind(this, this.modelId), config.timeout * 1000);
         this.deviceClient = DeviceClient.fromConnectionString(this.connectionstring, await this.deviceProvisioning.getConnectionTransport(this.protocol));
+        if (this.authenticationType === IOTC_CONNECT.X509_CERT) {
+            this.deviceClient.setOptions(this.options as X509);
+        }
         this.deviceClient.setTransportOptions({
             clean: config.cleanSession
         });
@@ -125,7 +127,7 @@ export class IoTCClient implements IIoTCClient {
         let connectionString: string;
         if (this.authenticationType == IOTC_CONNECT.X509_CERT) {
             const certificate = this.options as X509;
-            const x509Security = await this.deviceProvisioning.generateX509SecurityClient(this.id, certificate);
+            const x509Security = this.deviceProvisioning.generateX509SecurityClient(this.id, certificate);
             const registration = await this.deviceProvisioning.register(this.scopeId, this.protocol, x509Security);
             connectionString = `HostName=${registration.assignedHub};DeviceId=${registration.deviceId};x509=true`;
         }

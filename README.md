@@ -13,15 +13,23 @@
 npm install azure-iotcentral-device-client
 ```
 
+## Types
+
+Source code is written in Typescript so types are bundled with the package, you don't need to install any additional package.
+
+
 ## Samples
 
 A couple of samples in Javascripts can be found [here](https://github.com/lucadruda/iotc-samples)
+
+
+## Instructions
 
 When connecting a device to an IoT Central application an IoTCClient is initialized.
 SDK supports X509 and SymmetricKey authentication;
 
 #### X509
-```
+```js
 const iotCentral = require('azure-iotcentral-device-client');
 
 const scopeId = '';
@@ -37,7 +45,7 @@ const iotc = new iotCentral.IoTCClient(deviceId, scopeId, 'X509_CERT', cert);
 ```
 
 #### SAS
-```
+```js
 const iotCentral = require('azure-iotcentral-device-client');
 
 const scopeId = 'scopeID';
@@ -48,19 +56,16 @@ const iotc = new iotCentral.IoTCClient(deviceId, scopeId, 'symm_key', sasKey);
 ```
 
 ### Connect
-Using callback
-```
-iotc.connect(callback)
-```
-Using promises
-```
-iotc.connect().then(()=>{
-    console.log('Connected");
-})
+```ts
+await iotc.connect([options]);
 ```
 After successfull connection, IOTC context is available for further commands.
 
-All the callbacks are optional parameters and are triggered when message has reached the ingestion engine.
+_connect_ accepts an optional configuration object:
+
+- `timeout`: timeout value in seconds for connection operation
+
+<br/>
 
 ### Send telemetry
 

@@ -9,8 +9,8 @@
   "scripts": {
     "clean": "rimraf ./dist",
     "build": "npm run clean && tsc",
-    "build-samples":"tsc -p samples/ts",
-    "prepare": "npm run build",
+    "build:samples": "tsc -p samples/ts",
+    "prepare": "npm run build && npm run build:samples",
     "generate-certificates": "node ./dist/utils/certificates.js"
   },
   "files": [
@@ -38,6 +38,7 @@
   "devDependencies": {
     "@types/node": "^10.17.37",
     "@types/node-forge": "^0.9.5",
-    "rimraf": "^3.0.2"
+    "rimraf": "^3.0.2",
+    "typescript": "^4.0.3"
   }
 }

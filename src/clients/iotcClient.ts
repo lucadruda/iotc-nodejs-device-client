@@ -79,18 +79,14 @@ export class IoTCClient implements IIoTCClient {
         return;
     }
 
-    async connect(opts?: { cleanSession?: boolean, timeout?: number }): Promise<any> {
-        const config = { ...{ cleanSession: false, timeout: 30 }, ...opts };
+    async connect(timeout: number = 30): Promise<any> {
         const connStatusEvent = this.events[IOTC_EVENTS.ConnectionStatus];
         this.logger.log(`Connecting client...`);
-        this.connectionstring = await promiseTimeout(this.register.bind(this, this.modelId), config.timeout * 1000);
+        this.connectionstring = await promiseTimeout(this.register.bind(this, this.modelId), timeout * 1000);
         this.deviceClient = DeviceClient.fromConnectionString(this.connectionstring, await this.deviceProvisioning.getConnectionTransport(this.protocol));
         if (this.authenticationType === IOTC_CONNECT.X509_CERT) {
             this.deviceClient.setOptions(this.options as X509);
         }
-        this.deviceClient.setTransportOptions({
-            clean: config.cleanSession
-        });
         this.deviceClient.on('disconnect', () => {
             if (connStatusEvent && connStatusEvent.callback) {
                 (connStatusEvent.callback as ConnectionStatusCallback)(IOTC_CONNECTION_STATUS.DISCONNECTED);
@@ -105,11 +101,12 @@ export class IoTCClient implements IIoTCClient {
             this.connected = true;
 
         });
+
         try {
-            await promiseTimeout(util.promisify(this.deviceClient.open).bind(this.deviceClient), config.timeout * 1000);
+            await promiseTimeout(util.promisify(this.deviceClient.open).bind(this.deviceClient), timeout * 1000);
             this.connected = true;
-            if (!(this.protocol == DeviceTransport.HTTP)) {
-                this.twin = await promiseTimeout(util.promisify(this.deviceClient.getTwin).bind(this.deviceClient), config.timeout * 1000);
+            if (this.protocol !== DeviceTransport.HTTP) {
+                this.twin = await promiseTimeout(util.promisify(this.deviceClient.getTwin).bind(this.deviceClient), timeout * 1000);
                 this.subscribe();
             }
         }
@@ -216,7 +213,7 @@ export class IoTCClient implements IIoTCClient {
     private subscribe() {
         if (this.connected && this.twin) {
             this.twin.on('properties.desired', this.onPropertiesUpdated.bind(this));
-            this.listenToCommands()
+            this.listenToCommands();
             this.deviceClient.on('message', (msg) => {
                 if (msg.properties && msg.properties.propertyList) {
                     const c2d = msg.properties.propertyList.find(p => p.key === 'method-name');
@@ -363,106 +360,9 @@ export class IoTCClient implements IIoTCClient {
     }
 
 
-    private onSettingsUpdated(settingName: string, callback) {
-        if (settingName) {
-            settingName = `.${settingName}`;
-        }
-        return this.twin.on(`properties.desired${settingName ? settingName : ''}`, (settings) => {
-            let changed = {};
-            Object.getOwnPropertyNames(settings).forEach((setting) => {
-                this.logger.log(`Value of ${setting} changed.`)
-                if (setting === "$version") {
-                    return;
-                }
-                let reported = this.twin.properties.reported[setting];
-                if (!reported || reported.desiredVersion != settings.$version) {
-                    changed[setting] = settings[setting];
-                }
-            });
-            if (Object.keys(changed).length > 0) {
-                changed["$version"] = settings.$version;
-                callback(changed);
-            }
-        });
-    }
-    private onMessageSent(settingName: string, callback) {
-        if (settingName) {
-            settingName = `.${settingName}`;
-        }
-
-        return this.twin.on(`properties.desired${settingName ? settingName : ''}`, callback);
-    }
-
-    private onMessageReceived(msgname: string, callback) {
-        this.deviceClient.on(msgname, callback);
-    }
-
     public setLogging(logLevel: string | IOTC_LOGGING) {
         this.logger.setLogLevel(logLevel);
         this.logger.log(`Log level set to ${logLevel}`);
-    }
-
-
-    private onCommand(commandName: string, callback) {
-        if (!commandName) {
-            if (this.protocol == DeviceTransport.MQTT) {
-                this.deviceClient._transport.enableMethods((err) => {
-                    if (err) {
-                        throw new Error('Commands can\'t be received');
-                    }
-                    else {
-                        const commandFormat = /\$iothub\/methods\/POST\/([\S]+)\/\?\$rid=([\d])+/;
-                        (<any>this.deviceClient._transport)._mqtt.on('message', (topic, payload) => {
-                            const commandMatch = topic.match(commandFormat);
-                            if (commandMatch) {
-                                this.respondToCommand(commandMatch[2], commandMatch[1], payload, callback);
-                            }
-                        });
-                    }
-                });
-
-            }
-            else if (this.protocol == DeviceTransport.AMQP) {
-                this.deviceClient._transport.enableMethods((err) => {
-                    (<any>this.deviceClient._transport)._deviceMethodClient._receiverLink.on('message', (msg) => {
-                        this.respondToCommand(rhea.uuid_to_string(msg.correlation_id), msg.application_properties['IoThub-methodname'], JSON.parse(msg.body.content.toString()), callback);
-                    });
-                });
-            }
-            else {
-                throw new Error('Commands are not supported over http');
-            }
-
-        } else {
-            this.deviceClient.onDeviceMethod(commandName, (req, resp) => {
-                this.respondToCommand(req.requestId, req.methodName, req.payload, callback, resp);
-            });
-        }
-    }
-
-    private respondToCommand(requestId: string, commandName: string, payload: any, callback, resp?: DeviceMethodResponse) {
-        if (resp) {
-            resp.send(200, { message: 'received' }, (err) => {
-                callback({
-                    requestId,
-                    commandName,
-                    payload
-                });
-            });
-            return;
-        }
-        resp = new DeviceMethodResponse(requestId, this.deviceClient._transport);
-        resp.send(200, { message: 'received' });
-        this.deviceClient._transport.sendMethodResponse(resp, (err) => {
-            if (err) {
-                throw new Error('Can\'t reply to command');
-            }
-        });
-        callback({
-            requestId,
-            commandName,
-            payload
-        });
     }
 
 }

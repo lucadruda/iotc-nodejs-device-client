@@ -80,7 +80,7 @@ export interface IIoTCClient {
     /**
      * Connect the device
      */
-    connect(config?: { cleanSession?: boolean, timeout?: number, request?: Object }): Promise<void>,
+    connect(timeout?: number): Promise<void>,
     /**
      * 
      * @param payload Message to send: can be any type (usually json) or a collection of messages

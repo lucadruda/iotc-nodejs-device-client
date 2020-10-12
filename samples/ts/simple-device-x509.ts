@@ -43,9 +43,7 @@ async function run() {
     iotc.on(IOTC_EVENTS.Properties, onPropertyUpdated);
     iotc.on(IOTC_EVENTS.Commands, onCommandReceived);
     iotc.on(IOTC_EVENTS.ConnectionStatus, onConnectionStatusChanged);
-    await iotc.connect({
-        cleanSession: false
-    });
+    await iotc.connect();
     const propObj = { readOnlyProp: 30 };
     console.log(`Sending property ${JSON.stringify(propObj)}`)
     await iotc.sendProperty(propObj);

@@ -1,21 +1,97 @@
 // Copyright (c) Luca Druda. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-import { exec as openssl } from 'openssl-wrapper';
+import { pki, md } from 'node-forge';
 import * as path from 'path';
-import * as fs from 'fs-extra';
+import { promises as fs } from 'fs';
+import { createInterface } from 'readline';
 
-const DEFAULT_ROOT_FOLDER = path.join('./certificates');
-const DEFAULT_PASSWORD = 'abcd456';
-const DEFAULT_COMMON_NAME = 'Azure IoTCentral'
-const DEFAULT_TTL = 360;
-const DEFAULT_ALGORITHM = 'genrsa';
-const INTERMEDIATE_EXTENSION = 'v3_intermediate_ca';
-const LEAF_EXTENSION = 'server_cert';
 
+type InputReader = {
+    question: (questionText: string) => Promise<string>
+}
+
+const getInputReader = function (): InputReader {
+    const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+    return {
+        question: (questionText: string) => {
+            return new Promise((resolve) => {
+                rl.question(questionText, (answer) => {
+                    resolve(answer);
+                });
+            });
+        }
+    }
+}
+
+const Log = function (tag: 'INFO' | 'DEBUG', msg: string) {
+    if (tag === 'DEBUG') {
+        if (process.env.DEBUG) {
+            console.log(msg);
+        }
+    }
+    else {
+        console.log(msg);
+    }
+}
+
+export type CertificatesOptions = {
+    outFolder: string,
+    passphrase: string,
+    yearsTTL: number,
+    defaultAlgorithm: string,
+    keyBits: number,
+    intermediateExtension: string,
+    leafExtension: string
+}
+
+const defaultOptions: CertificatesOptions = {
+    outFolder: path.join('./certificates'),
+    passphrase: 'abcd456',
+    yearsTTL: 1,
+    defaultAlgorithm: 'genrsa',
+    keyBits: 4096,
+    intermediateExtension: 'v3_intermediate_ca',
+    leafExtension: 'server_cert'
+}
+
+let options: CertificatesOptions;
+let certificateAttrs: pki.CertificateField[];
+
+const certificateExtensions = [
+    {
+        name: 'subjectKeyIdentifier',
+    },
+    {
+        name: 'keyUsage',
+        keyCertSign: true,
+        digitalSignature: true,
+        nonRepudiation: true,
+        keyEncipherment: true,
+        dataEncipherment: true
+    }, {
+        name: 'extKeyUsage',
+        serverAuth: true,
+        clientAuth: true,
+        codeSigning: true,
+        emailProtection: true,
+        timeStamping: true
+    }, {
+        name: 'nsCertType',
+        client: true,
+        server: true,
+        email: true,
+        objsign: true,
+        sslCA: true,
+        emailCA: true,
+        objCA: true
+    }]
 
 type Certificate = {
-    privateKey?: string,
+    privateKey?: pki.PrivateKey,
     public?: string,
     password?: string,
     commonName?: string,
@@ -25,218 +101,139 @@ type Certificate = {
     config?: string
 }
 
-export type CertificatesConfiguration = {
-    rootFolder: string,
-    root_ca: Certificate,
-    intermediate_ca: Certificate,
-    device_ca: (deviceName: string) => Certificate
-}
 
-const defaultConfig: CertificatesConfiguration = {
-    rootFolder: DEFAULT_ROOT_FOLDER,
-    root_ca: {
-        public: path.join(DEFAULT_ROOT_FOLDER, 'certs/root_ca.cert.pem'),
-        privateKey: path.join(DEFAULT_ROOT_FOLDER, 'private/root_ca.key.pem'),
-        config: path.join(__dirname, '../../openssl/openssl_root_ca.cnf'),
-        password: DEFAULT_PASSWORD,
-        commonName: DEFAULT_COMMON_NAME,
-        ttl: DEFAULT_TTL
-    },
-    intermediate_ca: {
-        public: path.join(DEFAULT_ROOT_FOLDER, 'certs/intermediate_ca.cert.pem'),
-        privateKey: path.join(DEFAULT_ROOT_FOLDER, 'private/intermediate_ca.key.pem'),
-        config: path.join(__dirname, '../../openssl/openssl_device_intermediate_ca.cnf'),
-        password: DEFAULT_PASSWORD,
-        commonName: DEFAULT_COMMON_NAME,
-        ttl: DEFAULT_TTL,
-        csr: path.join(DEFAULT_ROOT_FOLDER, 'csr/intermediate_ca.csr.pem'),
-        chain: path.join(DEFAULT_ROOT_FOLDER, 'certs/intermediate_ca.chain.pem')
-    },
-    device_ca: (deviceName) => ({
-        public: path.join(DEFAULT_ROOT_FOLDER, `certs/${deviceName}.cert.pem`),
-        privateKey: path.join(DEFAULT_ROOT_FOLDER, `private/${deviceName}.key.pem`),
-        config: path.join(__dirname, '../../openssl/openssl_device_intermediate_ca.cnf'),
-        csr: path.join(DEFAULT_ROOT_FOLDER, `csr/${deviceName}.csr.pem`),
-        commonName: deviceName,
-        ttl: DEFAULT_TTL,
-        chain: path.join(DEFAULT_ROOT_FOLDER, `certs/${deviceName}.chain.pem`)
+async function createCAPrivKey(): Promise<pki.rsa.KeyPair> {
+    return new Promise((resolve, reject) => {
+        pki.rsa.generateKeyPair({
+            bits: options.keyBits,
+            algorithm: 'AES-256-CBC'
+        }, async (err, keypair) => {
+            if (err) {
+                return reject(err);
+            }
+            resolve(keypair);
+        });
     })
+
 }
 
-export class CertificateGenerator {
-    private config: CertificatesConfiguration;
-    constructor(private devicesCount: number, private devicesNamePrefix: string = 'device', config?: CertificatesConfiguration) {
-        this.config = Object.assign({}, defaultConfig, config)
-    }
+async function createCert(name: string, issuer?: pki.Certificate): Promise<pki.Certificate> {
+    return new Promise(async (resolve, reject) => {
+        const key = await createCAPrivKey();
+        await fs.writeFile(path.join(options.outFolder, `${name}.key.pem`), pki.privateKeyToPem(key.privateKey));
+        Log('DEBUG', `Created private key for cert: ${pki.privateKeyToPem(key.privateKey)}`);
+        const outcert = pki.createCertificate();
+        outcert.setSubject([...certificateAttrs, { name: 'commonName', value: name }]);
+        outcert.validity.notBefore = new Date();
+        outcert.validity.notAfter = new Date();
+        outcert.publicKey = key.publicKey;
+        outcert.privateKey = key.privateKey;
+        outcert.validity.notAfter.setFullYear(outcert.validity.notBefore.getFullYear() + 1);
+        outcert.serialNumber = `${Math.floor(Math.random() * 1000)}`;
+        outcert.setIssuer([...certificateAttrs, { name: 'commonName', value: name }]);
+        outcert.setExtensions([...certificateExtensions, ...(issuer ? [] : [{
+            name: 'basicConstraints',
+            cA: true
+        }])]);
+        if (issuer) {
+            outcert.setIssuer(issuer.subject.attributes);
+            Log('DEBUG', `Chiave:${pki.privateKeyToPem(issuer.privateKey)}\n`);
+            outcert.sign(issuer.privateKey, md.sha256.create());
 
-    private async createCAPrivKey(cert: Certificate): Promise<void> {
-        return new Promise<void>(async (resolve, reject) => {
-            const params = {
-                aes256: true,
-                passout: `pass:${cert.password}`,
-                4096: false,
-                out: cert.privateKey
-
+            if (!issuer.verify(outcert)) {
+                return reject('Something went wrong when creating leaf certificate.');
             }
-            openssl('genrsa', params, (err, output) => {
-                if (err) {
-                    console.log(err);
-                    reject(err.message);
-                }
-                else resolve();
-            });
-        });
+        }
+        else {
+            outcert.sign(key.privateKey, md.sha256.create());
+        }
+        resolve(outcert);
+    });
+}
+
+
+async function generateRoot(name: string): Promise<pki.Certificate> {
+    try {
+        await fs.mkdir(options.outFolder, { recursive: true });
+        // generate root
+        const caCert = await createCert(name);
+        await fs.writeFile(path.join(options.outFolder, `${name}.cert.pem`), pki.certificateToPem(caCert));
+        return caCert;
+    } catch (e) {
+        console.log(e);
     }
+}
 
-    private async createCert(cert: Certificate): Promise<void> {
-        return new Promise<void>(async (resolve, reject) => {
-            const params = {
-                config: cert.config,
-                new: true,
-                x509: true,
-                passin: `pass:${cert.password}`,
-                key: cert.privateKey,
-                subj: `/CN=${cert.commonName}`,
-                days: cert.ttl,
-                sha256: true,
-                extensions: 'v3_ca',
-                out: cert.public
-            }
 
-            openssl('req', params, (err, output) => {
-                if (err) {
-                    console.log(err);
-                    reject(err.message);
-                }
-                else resolve();
-            });
-        });
-    }
-
-    private async createCsr(cert: Certificate): Promise<void> {
-        return new Promise<void>(async (resolve, reject) => {
-            const params = {
-                config: cert.config,
-                new: true,
-                key: cert.privateKey,
-                subj: `/CN=${cert.commonName}`,
-                sha256: true,
-                out: cert.csr
-            }
-            if (cert.password) {
-                params['passin'] = `pass:${cert.password}`;
-            }
-
-            openssl('req', params, (err, output) => {
-                if (err) {
-                    console.log(err);
-                    reject(err.message);
-                }
-                else resolve();
-            });
-        });
-    }
-
-    private async signCert(cert: Certificate, signer: Certificate, extension: string): Promise<void> {
-        return new Promise<void>(async (resolve, reject) => {
-            const params = {
-                config: signer.config,
-                batch: true,
-                notext: true,
-                passin: `pass:${signer.password}`,
-                md: 'sha256',
-                days: cert.ttl,
-                in: cert.csr,
-                extensions: extension,
-                out: cert.public
-            }
-
-            openssl('ca', params, (err, output) => {
-                if (err) {
-                    console.log(err);
-                    reject(err.message);
-                }
-                else resolve();
-            });
-        });
-    }
-
-    private async createChain(certConfig: Certificate, ...certs: string[]) {
-        await fs.writeFile(certConfig.chain, (await Promise.all(certs.map(async cert => {
-            return fs.readFile(cert);
-        }))).join(''));
-    }
-
-    public async init() {
-        console.log(`Certificates will be saved under ${this.config.rootFolder}`);
-        await fs.remove(this.config.rootFolder);
-        await fs.mkdirp(path.join(this.config.root_ca.public, '..'));
-        await fs.mkdirp(path.join(this.config.root_ca.privateKey, '..'));
-        await fs.mkdirp(path.join(this.config.intermediate_ca.public, '..'));
-        await fs.mkdirp(path.join(this.config.intermediate_ca.privateKey, '..'));
-        await fs.mkdirp(path.join(this.config.intermediate_ca.csr, '..'));
-        await fs.mkdirp(path.join(this.config.rootFolder, 'newcerts'));
-        await fs.createFile(path.join(this.config.rootFolder, 'index.txt'));
-        await fs.writeFile(path.join(this.config.rootFolder, 'serial'), '01');
-        // set env for openssl
-        process.env['ROOT_FOLDER'] = this.config.rootFolder
-    }
-    public async generateRoot() {
+async function createDevices(count: number, prefix: string, rootCertificate: pki.Certificate) {
+    for (let i = 1; i <= count; i++) {
+        const name = `${prefix}${count > 1 ? i : ''}`;
+        Log('INFO', `Creating certificates for ${name}`);
         try {
-            // generate root
-            await this.createCAPrivKey(this.config.root_ca);
-
-            await this.createCert(this.config.root_ca);
-            //generate intermediate
-            await this.createCAPrivKey(this.config.intermediate_ca);
-
-            await this.createCsr(this.config.intermediate_ca);
-
-            await this.signCert(this.config.intermediate_ca, this.config.root_ca, INTERMEDIATE_EXTENSION);
-            await this.createChain(this.config.intermediate_ca, this.config.intermediate_ca.public, this.config.root_ca.public);
-        } catch (e) {
-            console.log(e);
+            const leaf = await createCert(name, rootCertificate);
+            const outName = path.join(options.outFolder, `${name}.cert.pem`);
+            await fs.writeFile(outName, `${pki.certificateToPem(leaf)}${pki.certificateToPem(rootCertificate)}`);
         }
-    }
-
-    private async createLeaf(cert: Certificate, signer: Certificate) {
-        await new Promise(async (resolve, reject) => {
-            const params = {
-                4096: false,
-                out: cert.privateKey
-            }
-
-            openssl(DEFAULT_ALGORITHM, params, (err, output) => {
-                if (err) {
-                    reject(err.message);
-                }
-                else resolve();
-            });
-        });
-        await this.createCsr(cert);
-        await this.signCert(cert, signer, LEAF_EXTENSION);
-        await this.createChain(cert, cert.public, this.config.intermediate_ca.public, this.config.root_ca.public);
-    }
-
-    public async createDevices() {
-        for (let i = 0; i < this.devicesCount; i++) {
-            console.log(`Creating certificates for ${this.devicesNamePrefix}${i}`);
-            try {
-                await this.createLeaf(this.config.device_ca(`${this.devicesNamePrefix}${i}`), this.config.intermediate_ca);
-            }
-            catch (e) { }
-        }
-    }
-    public async validate(validationCode: string): Promise<string> {
-        await this.createLeaf({
-            public: path.join(this.config.rootFolder, `validation.cert.pem`),
-            privateKey: path.join(this.config.rootFolder, `validation.key.pem`),
-            config: this.config.root_ca.config,
-            password: DEFAULT_PASSWORD,
-            commonName: validationCode,
-            ttl: DEFAULT_TTL,
-            chain: path.join(this.config.rootFolder, `validation.chain.pem`)
-        }, this.config.root_ca);
-        return path.join(this.config.rootFolder, `validation.cert.pem`);
+        catch (e) { }
     }
 }
+async function validate(validationCode: string, rootCA: pki.Certificate): Promise<string> {
+    await fs.mkdir(options.outFolder, { recursive: true });
+    const validated = await createCert(validationCode, rootCA);
+    const outName = path.join(options.outFolder, 'Validated.pem');
+    await fs.writeFile(outName, `${pki.certificateToPem(validated)}${pki.certificateToPem(rootCA)}`);
+    return outName;
+}
+
+async function run(validationCode?: string) {
+    console.log('Welcome to certificate generation for Azure IoT Central...');
+    options = { ...defaultOptions, ...{} };
+    const name = 'AzureIoTCentral';
+    certificateAttrs = [
+        {
+            name: 'countryName',
+            value: 'US'
+        }, {
+            shortName: 'ST',
+            value: 'Washington'
+        }, {
+            name: 'localityName',
+            value: 'Redmond'
+        }, {
+            name: 'organizationName',
+            value: 'Azure'
+        }, {
+            shortName: 'OU',
+            value: 'Azure IoT'
+        }
+    ];
+    if (validationCode) {
+        const rootCertPem = await fs.readFile(path.join(options.outFolder, `${name}.cert.pem`), { encoding: 'binary' });
+        const rootKeyPem = await fs.readFile(path.join(options.outFolder, `${name}.key.pem`), { encoding: 'binary' });
+        Log('DEBUG', rootCertPem.toString());
+        const rootCert = pki.certificateFromPem(rootCertPem);
+        const rootKey = pki.privateKeyFromPem(rootKeyPem);
+        rootCert.privateKey = rootKey;
+        await validate(validationCode, rootCert);
+        console.log(`Certificates have been generated. You can find them at '${options.outFolder}'`);
+        process.exit(0);
+    }
+
+    const inputReader = getInputReader();
+    const certNum = +(await inputReader.question('How many leaf certificates do you want to generate?:\t'));
+    const deviceName = await inputReader.question('Insert device name, in case of multiple devices, this is used as a prefix to generate a unique name (e.g. device => device1,device2):\t');
+    Log('INFO', 'Generating root certificate');
+    const root = await generateRoot(name);
+
+    Log('INFO', 'Generating device certificates');
+    await createDevices(certNum, deviceName, root);
+    validationCode = await inputReader.question('Insert validation code: ');
+    console.log('Generating validated certificate');
+    const validatePath = await validate(validationCode, root);
+    console.log(`Certificates have been generated. You can find them at '${options.outFolder}'`);
+    process.exit(0);
+
+}
+
+var myArgs = process.argv.slice(2);
+run(myArgs.length > 0 ? myArgs[0] : undefined);

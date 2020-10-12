@@ -3,19 +3,13 @@
         "target": "es2017",
         "module": "commonjs",
         "moduleResolution": "node",
-        "sourceMap": true,
         "emitDecoratorMetadata": true,
-        "experimentalDecorators": true,
-        "outDir": "./dist",
-        "declaration": true
+        "experimentalDecorators": true
     },
     "exclude": [
         "./node_modules",
         "./dist"
     ],
     "compileOnSave": false,
-    "buildOnSave": false,
-    "include": [
-        "./src/**/*"
-      ]
+    "buildOnSave": false
 }

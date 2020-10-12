@@ -1,28 +1,28 @@
 // Copyright (c) Luca Druda. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-import { IIoTCClient, ConnectionError, Result, IIoTCLogger, PropertyCallback, CommandCallback, IIoTCCommand, IIoTCCommandResponse, ConnectionCallback } from "../types/interfaces";
-import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_OK, IOTC_CONNECTION_ERROR, IOTC_EVENTS, DeviceTransport, DPS_DEFAULT_ENDPOINT, IOTC_LOGGING, IOTC_PROTOCOL, IOTC_CONNECTION_STATUS } from "../types/constants";
-import { X509, Message, callbackToPromise } from "azure-iot-common";
+import { IIoTCClient, IIoTCLogger, CommandCallback, PropertyCallback, ConnectionStatusCallback, IIoTCCommand, IIoTCCommandResponse, FileUploadResult } from "../types/interfaces";
+import { IOTC_CONNECT, IOTC_EVENTS, DeviceTransport, DPS_DEFAULT_ENDPOINT, IOTC_LOGGING, IOTC_CONNECTION_STATUS } from "../types/constants";
+import { X509, Message } from "azure-iot-common";
 import * as util from 'util';
 import { Client as DeviceClient, Twin, DeviceMethodResponse } from 'azure-iot-device';
 import { ConsoleLogger } from "../consoleLogger";
 import { DeviceProvisioning } from "../provision";
 import * as rhea from 'rhea';
-import { Disconnected } from "azure-iot-common/dist/results";
+import { promiseTimeout } from "../utils/common";
 
 export class IoTCClient implements IIoTCClient {
     isConnected(): boolean {
         return this.connected;
     }
 
+
     private events: {
         [s in IOTC_EVENTS]?: {
-            callback: PropertyCallback | CommandCallback | ConnectionCallback,
+            callback: PropertyCallback | CommandCallback | ConnectionStatusCallback,
             filter?: string
         }
     }
-
     private protocol: DeviceTransport = DeviceTransport.MQTT;
     private endpoint: string = DPS_DEFAULT_ENDPOINT;
     private connectionstring: string;
@@ -48,6 +48,9 @@ export class IoTCClient implements IIoTCClient {
     async fetchTwin(): Promise<void> {
         this.twin = await util.promisify(this.deviceClient.getTwin).bind(this.deviceClient)();
     }
+    uploadFile(fileName: string, contentType: string, fileData: any, encoding?: string): Promise<FileUploadResult> {
+        throw new Error("Method not implemented.");
+    }
     getConnectionString(): string {
         return this.connectionstring;
     }
@@ -68,60 +71,43 @@ export class IoTCClient implements IIoTCClient {
     setModelId(modelId: string): void {
         this.deviceProvisioning.setIoTCModelId(modelId);
     }
-    setProxy(options: HTTP_PROXY_OPTIONS): void {
-        throw new Error("Method not implemented.");
-    }
-    async sendTelemetry(payload: any, properties?: any): Promise<void> {
-        return this.sendMessage(payload, properties);
-    }
-    async sendState(payload: any, properties?: any): Promise<void> {
-        return this.sendMessage(payload, properties);
-    }
-    async sendEvent(payload: any, properties?: any): Promise<void> {
-        return this.sendMessage(payload, properties);
-    }
-    async sendProperty(payload: any): Promise<void> {
-        // payload = JSON.stringify(payload);
-        this.logger.log(`Sending property ${payload}`);
-        return new Promise<void>((resolve, reject) => {
-            this.twin.properties.reported.update(payload, (err) => {
-                if (err) {
-                    reject(err);
-                }
-                else {
-                    resolve();
-                }
-            });
-        });
+
+
+    async disconnect(): Promise<void> {
+        this.logger.debug(`Disconnecting client...`);
+        const disconnectResult = await this.deviceClient.close();
+        return;
     }
 
-    async disconnect(): Promise<string> {
-        this.logger.log(`Disconnecting client...`);
-        return (await this.deviceClient.close()).reason;
-    }
-
-    async connect(cleanSession: boolean = true): Promise<any> {
+    async connect(timeout: number = 30): Promise<any> {
+        const connStatusEvent = this.events[IOTC_EVENTS.ConnectionStatus];
         this.logger.log(`Connecting client...`);
-        this.connectionstring = await this.register();
+        this.connectionstring = await promiseTimeout(this.register.bind(this, this.modelId), timeout * 1000);
         this.deviceClient = DeviceClient.fromConnectionString(this.connectionstring, await this.deviceProvisioning.getConnectionTransport(this.protocol));
+        if (this.authenticationType === IOTC_CONNECT.X509_CERT) {
+            this.deviceClient.setOptions(this.options as X509);
+        }
         this.deviceClient.on('disconnect', () => {
-            const connStatusEvent = this.events[IOTC_EVENTS.ConnectionStatus];
-            if (connStatusEvent) {
-                (connStatusEvent.callback as ConnectionCallback)(IOTC_CONNECTION_STATUS.Disconnected);
+            if (connStatusEvent && connStatusEvent.callback) {
+                (connStatusEvent.callback as ConnectionStatusCallback)(IOTC_CONNECTION_STATUS.DISCONNECTED);
             }
             this.connected = false;
 
         });
-        try {
-            await util.promisify(this.deviceClient.open).bind(this.deviceClient)();
-            this.connected = true;
-            if (!(this.protocol == DeviceTransport.HTTP)) {
-                await this.fetchTwin();
-                this.subscribe();
+        this.deviceClient.on('connect', () => {
+            if (connStatusEvent && connStatusEvent.callback) {
+                (connStatusEvent.callback as ConnectionStatusCallback)(IOTC_CONNECTION_STATUS.CONNECTED);
             }
-            const connStatusEvent = this.events[IOTC_EVENTS.ConnectionStatus];
-            if (connStatusEvent) {
-                (connStatusEvent.callback as ConnectionCallback)(IOTC_CONNECTION_STATUS.Connected);
+            this.connected = true;
+
+        });
+
+        try {
+            await promiseTimeout(util.promisify(this.deviceClient.open).bind(this.deviceClient), timeout * 1000);
+            this.connected = true;
+            if (this.protocol !== DeviceTransport.HTTP) {
+                this.twin = await promiseTimeout(util.promisify(this.deviceClient.getTwin).bind(this.deviceClient), timeout * 1000);
+                this.subscribe();
             }
         }
         catch (err) {
@@ -138,23 +124,19 @@ export class IoTCClient implements IIoTCClient {
         let connectionString: string;
         if (this.authenticationType == IOTC_CONNECT.X509_CERT) {
             const certificate = this.options as X509;
-            const x509Security = await this.deviceProvisioning.generateX509SecurityClient(this.id, certificate);
+            const x509Security = this.deviceProvisioning.generateX509SecurityClient(this.id, certificate);
             const registration = await this.deviceProvisioning.register(this.scopeId, this.protocol, x509Security);
             connectionString = `HostName=${registration.assignedHub};DeviceId=${registration.deviceId};x509=true`;
         }
-        else if (this.authenticationType == IOTC_CONNECT.CONN_STRING) {
-            // Just pass the provided connection string.
-            connectionString = this.options as string;
-        }
         else {
-            let sasKey;
+            let sasKey: string;
             if (this.authenticationType == IOTC_CONNECT.SYMM_KEY) {
                 sasKey = this.deviceProvisioning.computeDerivedKey(this.options as string, this.id);
             }
             else {
                 sasKey = this.options as string;
             }
-            const sasSecurity = await this.deviceProvisioning.generateSymKeySecurityClient(this.id, sasKey);
+            const sasSecurity = this.deviceProvisioning.generateSymKeySecurityClient(this.id, sasKey);
             const registration = await this.deviceProvisioning.register(this.scopeId, this.protocol, sasSecurity);
             connectionString = `HostName=${registration.assignedHub};DeviceId=${registration.deviceId};SharedAccessKey=${sasKey}`;
         }
@@ -163,12 +145,13 @@ export class IoTCClient implements IIoTCClient {
     }
 
 
-    on(eventName: string | IOTC_EVENTS, callback: PropertyCallback | CommandCallback): void {
+    on(eventName: string | IOTC_EVENTS, callback: PropertyCallback | CommandCallback | ConnectionStatusCallback): void {
         if (typeof (eventName) == 'number') {
             eventName = IOTC_EVENTS[eventName];
         }
         const properties = eventName.match(/^Properties$|Properties\.([\S]+)/); // matches "Properties" or "Properties.propertyname"
         const commands = eventName.match(/^Commands$|Commands\.([\S]+)/);
+        const connection = eventName.match(/^ConnectionStatus$/);
         if (properties) {
             this.events[IOTC_EVENTS.Properties] = {
                 callback: callback as PropertyCallback,
@@ -181,38 +164,56 @@ export class IoTCClient implements IIoTCClient {
                 filter: commands[1] ? commands[1] : undefined
             }
         }
-    }
-
-
-    async sendMessage(payload: any, properties: any): Promise<void> {
-        if (payload instanceof Array) {
-            const messageEnqued = await this.deviceClient.sendEventBatch(payload.map(p => new Message(JSON.stringify(p))));
-            return;
-        }
-        else {
-            let message = new Message(JSON.stringify(payload));
-            if (properties) {
-                Object.keys(properties).forEach(prop => {
-                    if (prop.toLowerCase() === 'contenttype') {
-                        message.contentType = properties[prop];
-                    }
-                    else if (prop.toLowerCase() === 'contentencoding') {
-                        message.contentEncoding = properties[prop];
-                    }
-                    else {
-                        message.properties.add(prop, properties[prop]);
-                    }
-                });
+        else if (connection) {
+            this.events[IOTC_EVENTS.ConnectionStatus] = {
+                callback
             }
-            const messageEnqued = await this.deviceClient.sendEvent(message);
-            return;
         }
     }
+
+    async sendTelemetry(payload: any, properties?: any): Promise<void> {
+        if (payload instanceof Array) {
+            await this.deviceClient.sendEventBatch(payload.map(p => new Message(JSON.stringify(p))));
+            return;
+        }
+
+        let message = new Message(JSON.stringify(payload));
+        if (properties) {
+            Object.keys(properties).forEach(prop => {
+                if (prop.toLowerCase() === 'contenttype') {
+                    message.contentType = properties[prop];
+                }
+                else if (prop.toLowerCase() === 'contentencoding') {
+                    message.contentEncoding = properties[prop];
+                }
+                else {
+                    message.properties.add(prop, properties[prop]);
+                }
+            });
+        }
+        await this.deviceClient.sendEvent(message);
+    }
+
+    async sendProperty(property: any): Promise<void> {
+        // payload = JSON.stringify(payload);
+        return new Promise((resolve, reject) => {
+            this.logger.debug(`Sending property ${property}`);
+            this.twin.properties.reported.update(property, (err: Error) => {
+                if (err) {
+                    reject(err);
+                }
+                else {
+                    resolve();
+                }
+            });
+        });
+    }
+
 
     private subscribe() {
         if (this.connected && this.twin) {
             this.twin.on('properties.desired', this.onPropertiesUpdated.bind(this));
-            this.listenToCommands()
+            this.listenToCommands();
             this.deviceClient.on('message', (msg) => {
                 if (msg.properties && msg.properties.propertyList) {
                     const c2d = msg.properties.propertyList.find(p => p.key === 'method-name');
@@ -269,9 +270,9 @@ export class IoTCClient implements IIoTCClient {
                     if (wrapped) {
                         await this.sendProperty({
                             [prop]: {
-                                status: 'completed',
-                                message: message ? message : `Property applied`,
-                                desiredVersion: propVersion,
+                                ac: 200,
+                                ad: message ? message : `Property applied`,
+                                av: propVersion,
                                 value
                             }
                         });
@@ -286,6 +287,17 @@ export class IoTCClient implements IIoTCClient {
         });
     }
 
+    private async ackCommand(requestId: string, message: string, status?: IIoTCCommandResponse) {
+        if (!this.connected) {
+            return;
+        }
+        let resp = new DeviceMethodResponse(requestId, this.deviceClient._transport);
+        let responseStatus = 200;
+        if (status && status == IIoTCCommandResponse.ERROR) {
+            responseStatus = 500;
+        }
+        await resp.send(responseStatus, message);
+    }
 
     private onCommandReceived(command: Partial<IIoTCCommand>) {
         const listener = this.events[IOTC_EVENTS.Commands];
@@ -310,25 +322,6 @@ export class IoTCClient implements IIoTCClient {
             }.bind(this)
         });
     }
-
-    private async ackCommand(requestId: string, message: string, status?: IIoTCCommandResponse) {
-        if (!this.connected) {
-            return;
-        }
-        let resp = new DeviceMethodResponse(requestId, this.deviceClient._transport);
-        let responseStatus = 200;
-        if (status && status == IIoTCCommandResponse.ERROR) {
-            responseStatus = 500;
-        }
-        await resp.send(responseStatus, message);
-    }
-
-
-    public setLogging(logLevel: string | IOTC_LOGGING) {
-        this.logger.setLogLevel(logLevel);
-        this.logger.log(`Log level set to ${logLevel}`);
-    }
-
 
     private listenToCommands() {
         if (this.protocol == DeviceTransport.MQTT) {
@@ -364,6 +357,12 @@ export class IoTCClient implements IIoTCClient {
         else {
             throw new Error('Commands are not supported over http');
         }
+    }
+
+
+    public setLogging(logLevel: string | IOTC_LOGGING) {
+        this.logger.setLogLevel(logLevel);
+        this.logger.log(`Log level set to ${logLevel}`);
     }
 
 }

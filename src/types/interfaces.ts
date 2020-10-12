@@ -1,17 +1,12 @@
 // Copyright (c) Luca Druda. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-import { X509ProvisioningTransport, TpmProvisioningTransport } from "azure-iot-provisioning-device";
+import { X509ProvisioningTransport } from "azure-iot-provisioning-device";
 import { X509, Message } from "azure-iot-common";
-import { IOTC_CONNECT, HTTP_PROXY_OPTIONS, IOTC_CONNECTION_ERROR, IOTC_EVENTS, IOTC_LOGGING, IOTC_CONNECTION_STATUS } from "./constants";
+import { IOTC_CONNECTION_STATUS, IOTC_EVENTS, IOTC_LOGGING } from "./constants";
 import { SymmetricKeySecurityClient } from "azure-iot-security-symmetric-key";
-import { X509Security } from "azure-iot-security-x509";
+import { X509Security } from 'azure-iot-security-x509';
 
-export class ConnectionError extends Error {
-    constructor(message: string, public code: IOTC_CONNECTION_ERROR) {
-        super(message);
-    }
-}
 export class Result {
     constructor(public code?: any) {
 
@@ -38,16 +33,36 @@ export enum IIoTCCommandResponse {
 export interface IIoTCCommand {
     name: string,
     requestPayload: any,
-    requestId: string,
+    requestId?: string,
     reply: (status: IIoTCCommandResponse, message: string) => Promise<void>
 }
+
+
 export type PropertyCallback = (data: IIoTCProperty) => void | Promise<void>;
 export type CommandCallback = (data: IIoTCCommand) => void | Promise<void>;
-export type ConnectionCallback = (connectionStatus: IOTC_CONNECTION_STATUS) => void | Promise<void>;
+export type ConnectionStatusCallback = (status: IOTC_CONNECTION_STATUS) => void | Promise<void>;
 
+export type FileRequestMetadata = {
+    correlationId: string,
+    hostName: string,
+    containerName: string,
+    blobName: string,
+    sasToken: string
+}
+export type FileResponseMetadata = {
+    correlationId: string,
+    isSuccess: boolean,
+    statusCode: number,
+    statusDescription: string
+}
+
+export type FileUploadResult = {
+    status: number,
+    errorMessage?: string
+}
 export interface IIoTCClient {
 
-    getConnectionString(): string,
+    readonly id: string,
     /**
      * 
      * @param modelId IoT Central model Id for automatic approval process
@@ -62,11 +77,11 @@ export interface IIoTCClient {
      * Disconnect device. Client cannot be reused after disconnect!!!
      * @returns The disconnection reason
      */
-    disconnect(): Promise<string>,
+    disconnect(): Promise<void>,
     /**
      * Connect the device
      */
-    connect(cleanSession?: boolean): Promise<void>,
+    connect(timeout?: number): Promise<void>,
     /**
      * 
      * @param payload Message to send: can be any type (usually json) or a collection of messages
@@ -93,14 +108,24 @@ export interface IIoTCClient {
 
     isConnected(): boolean,
 
-    fetchTwin(): Promise<void>
+    fetchTwin(): Promise<void>,
+
+    uploadFile(fileName: string, contentType: string, fileData: any, encoding?: string): Promise<FileUploadResult>
 
 }
 
 export interface IIoTCLogger {
     setLogLevel(logLevel: string | IOTC_LOGGING): void;
-    log(message: string, tag?: string): void;
-    debug(message: string, tag?: string): void;
+    log(message: string, tag?: string): void | Promise<void>;
+    debug(message: string, tag?: string): void | Promise<void>;
 }
 
 
+export type IoTCCredentials = {
+
+    deviceId: string,
+    modelId: string,
+    patientId: string,
+    deviceKey: string,
+    scopeId: string
+}

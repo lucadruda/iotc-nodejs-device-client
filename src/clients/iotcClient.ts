@@ -79,13 +79,7 @@ export class IoTCClient implements IIoTCClient {
     filePath: string
   ): Promise<FileUploadResult> {
     let result: FileUploadResult;
-    const blobInfo = await this.deviceClient.getBlobSharedAccessSignature(
-      fileName
-    );
-    if (!blobInfo) {
-      throw new Error("Invalid upload parameters");
-    }
-
+    
     // Setup blank status notification arguments to be filled in on success/failure
     const rStream = createReadStream(filePath);
 
@@ -98,7 +92,7 @@ export class IoTCClient implements IIoTCClient {
       await this.deviceClient.uploadToBlob(
         fileName,
         rStream,
-        (await fs.fstat(await fs.open(filePath, "r"))).size
+        (await fs.stat(filePath)).size
       );
       this.logger.log(`File ${fileName} successfully uploaded.`);
       result = { status: 201, destinationPath };
@@ -461,26 +455,5 @@ export class IoTCClient implements IIoTCClient {
   public setLogging(logLevel: string | IOTC_LOGGING) {
     this.logger.setLogLevel(logLevel);
     this.logger.log(`Log level set to ${logLevel}`);
-  }
-
-  private async getFileStats(filePath: string): Promise<any> {
-    let fileStats = {};
-
-    try {
-      await fs.fstat(await fs.open(filePath, "r"));
-      fileStats = await new Promise((resolve, reject) => {
-        fsStat(filePath, (err, stats) => {
-          if (err) {
-            return reject(err);
-          }
-
-          return resolve(stats);
-        });
-      });
-    } catch (ex) {
-      log(`An error occurred while getting file stats: ${ex.message}`);
-    }
-
-    return fileStats;
   }
 }

@@ -1,7 +1,10 @@
 dist/**
 node_modules
 .npmrc
-.vscode/
 .DS_Store
 certificates
 certificate
+
+# vscode
+.vscode
+debug.log

@@ -95,7 +95,7 @@ export interface IIoTCClient {
     * @param [callback] Function to execute when property gets set
     * @returns void or Promise<Result>
     */
-    sendProperty(payload: any): Promise<void>,
+    sendProperty(payload: any, properties?: any): Promise<void>,
     /**
      * 
      * @param eventName name of the event to listen
@@ -103,6 +103,7 @@ export interface IIoTCClient {
      */
     on(eventName: IOTC_EVENTS.Properties | string, callback: PropertyCallback): void,
     on(eventName: IOTC_EVENTS.Commands | string, callback: CommandCallback): void,
+    on(eventName: IOTC_EVENTS.ConnectionStatus | string, callback: ConnectionStatusCallback): void,
 
     setLogging(logLevel: string | IOTC_LOGGING): void,
 
@@ -110,7 +111,7 @@ export interface IIoTCClient {
 
     fetchTwin(): Promise<void>,
 
-    uploadFile(fileName: string, contentType: string, fileData: any, encoding?: string): Promise<FileUploadResult>
+    uploadFile(fileName: string, fileData: string): Promise<FileUploadResult>
 
 }
 

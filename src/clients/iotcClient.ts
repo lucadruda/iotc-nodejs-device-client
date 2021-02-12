@@ -96,7 +96,8 @@ export class IoTCClient implements IIoTCClient {
     });
     // Construct the blob URL to construct the blob client for file uploads
     const { hostName, containerName, blobName, sasToken } = blobInfo;
-    const blobUrl = `https://${hostName}/${containerName}/${blobName}${sasToken}`;
+    const destinationPath = `https://${hostName}/${containerName}/${blobName}`;
+    const blobUrl = `${destinationPath}/${sasToken}`;
 
     // Create the BlockBlobClient for file upload to the Blob Storage Blob
     const blobClient = new BlockBlobClient(blobUrl, pipeline);
@@ -114,7 +115,7 @@ export class IoTCClient implements IIoTCClient {
       isSuccess = true;
       statusCode = uploadStatus._response.status;
       statusDescription = `File ${fileName} successfully uploaded.`;
-      result = { status: statusCode };
+      result = { status: statusCode, destinationPath };
     } catch (err) {
       isSuccess = false;
       statusCode = err.code;

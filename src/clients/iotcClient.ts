@@ -30,12 +30,7 @@ import { ConsoleLogger } from "../consoleLogger";
 import { DeviceProvisioning } from "../provision";
 import * as rhea from "rhea";
 import { promiseTimeout } from "../utils/common";
-import {
-  AnonymousCredential,
-  BlockBlobClient,
-  newPipeline,
-} from "@azure/storage-blob";
-
+import { createReadStream, promises as fs } from "fs";
 export class IoTCClient implements IIoTCClient {
   isConnected(): boolean {
     return this.connected;
@@ -90,46 +85,27 @@ export class IoTCClient implements IIoTCClient {
     if (!blobInfo) {
       throw new Error("Invalid upload parameters");
     }
-    const pipeline = newPipeline(new AnonymousCredential(), {
-      retryOptions: { maxTries: 4 },
-      keepAliveOptions: { enable: false },
-    });
-    // Construct the blob URL to construct the blob client for file uploads
-    const { hostName, containerName, blobName, sasToken } = blobInfo;
-    const destinationPath = `https://${hostName}/${containerName}/${blobName}`;
-    const blobUrl = `${destinationPath}/${sasToken}`;
-
-    // Create the BlockBlobClient for file upload to the Blob Storage Blob
-    const blobClient = new BlockBlobClient(blobUrl, pipeline);
 
     // Setup blank status notification arguments to be filled in on success/failure
-    let isSuccess: boolean;
-    let statusCode: number;
-    let statusDescription: string;
+    const rStream = createReadStream(filePath);
 
     try {
-      const uploadStatus = await blobClient.uploadFile(filePath);
+      const blobInfo = await this.deviceClient.getBlobSharedAccessSignature(
+        fileName
+      );
+      const { hostName, containerName, blobName, sasToken } = blobInfo;
+      const destinationPath = `https://${hostName}/${containerName}/${blobName}`;
+      await this.deviceClient.uploadToBlob(
+        fileName,
+        rStream,
+        (await fs.fstat(await fs.open(filePath, "r"))).size
+      );
       this.logger.log(`File ${fileName} successfully uploaded.`);
-
-      // Save successful status notification arguments
-      isSuccess = true;
-      statusCode = uploadStatus._response.status;
-      statusDescription = `File ${fileName} successfully uploaded.`;
-      result = { status: statusCode, destinationPath };
+      result = { status: 201, destinationPath };
     } catch (err) {
-      isSuccess = false;
-      statusCode = err.code;
-      statusDescription = err.message;
-      result = { status: statusCode, errorMessage: statusDescription };
+      result = { status: 500, errorMessage: err?.message };
       this.logger.log(`File ${fileName} failed to upload. ${err}`);
     }
-
-    await this.deviceClient.notifyBlobUploadStatus(
-      blobInfo.correlationId,
-      isSuccess,
-      statusCode,
-      statusDescription
-    );
     return result;
   }
   getConnectionString(): string {
@@ -485,5 +461,26 @@ export class IoTCClient implements IIoTCClient {
   public setLogging(logLevel: string | IOTC_LOGGING) {
     this.logger.setLogLevel(logLevel);
     this.logger.log(`Log level set to ${logLevel}`);
+  }
+
+  private async getFileStats(filePath: string): Promise<any> {
+    let fileStats = {};
+
+    try {
+      await fs.fstat(await fs.open(filePath, "r"));
+      fileStats = await new Promise((resolve, reject) => {
+        fsStat(filePath, (err, stats) => {
+          if (err) {
+            return reject(err);
+          }
+
+          return resolve(stats);
+        });
+      });
+    } catch (ex) {
+      log(`An error occurred while getting file stats: ${ex.message}`);
+    }
+
+    return fileStats;
   }
 }

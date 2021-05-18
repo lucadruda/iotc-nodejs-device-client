@@ -19,27 +19,27 @@
     "assets"
   ],
   "dependencies": {
-    "@azure/storage-blob": "^12.2.1",
-    "azure-iot-common": "^1.12.6",
-    "azure-iot-device": "^1.17.2",
-    "azure-iot-device-amqp": "^1.13.2",
-    "azure-iot-device-http": "^1.13.2",
-    "azure-iot-device-mqtt": "^1.15.2",
-    "azure-iot-provisioning-device-amqp": "^1.8.6",
-    "azure-iot-provisioning-device-http": "^1.8.6",
-    "azure-iot-provisioning-device-mqtt": "^1.7.6",
-    "azure-iot-security-symmetric-key": "^1.7.6",
-    "azure-iot-security-x509": "^1.7.6",
-    "azure-iothub": "^1.13.0",
+    "@azure/storage-blob": "^12.5.0",
+    "azure-iot-common": "^1.12.8",
+    "azure-iot-device": "^1.17.3",
+    "azure-iot-device-amqp": "^1.13.3",
+    "azure-iot-device-http": "^1.13.3",
+    "azure-iot-device-mqtt": "^1.15.3",
+    "azure-iot-provisioning-device-amqp": "^1.8.7",
+    "azure-iot-provisioning-device-http": "^1.8.7",
+    "azure-iot-provisioning-device-mqtt": "^1.7.7",
+    "azure-iot-security-symmetric-key": "^1.7.7",
+    "azure-iot-security-x509": "^1.7.7",
+    "azure-iothub": "^1.14.0",
     "mqtt": "^3.0.0",
     "node-forge": "^0.10.0",
     "rhea": "^0.3.11",
     "uuid": "^3.4.0"
   },
   "devDependencies": {
-    "@types/node": "^10.17.37",
-    "@types/node-forge": "^0.9.5",
+    "@types/node": "^10.17.60",
+    "@types/node-forge": "^0.9.7",
     "rimraf": "^3.0.2",
-    "typescript": "^4.0.3"
+    "typescript": "^4.2.4"
   }
 }
